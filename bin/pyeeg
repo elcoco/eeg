@@ -3,6 +3,8 @@
 try:
     import sys,os
     import matplotlib.pyplot as plt
+    import matplotlib.animation as animation
+    from matplotlib import style
 
     import socket
     import select
@@ -160,9 +162,26 @@ class EEG(object):
         plt.title('Data for world domination!')
         plt.ylabel('freq')
         plt.xlabel('time')
-        #plt.axis([1,100,-8388607, 8388607])
         plt.legend()
+        plt.show()
 
+
+    def setup_plot_bak(self):
+        #plt.title('Data for world domination!')
+        #plt.ylabel('freq')
+        #plt.xlabel('time')
+        #plt.legend()
+
+        style.use('fivethirtyeight')
+        self.fig = plt.figure()
+        self.ax1 = self.fig.add_subplot(1,1,1)
+        ani = animation.FuncAnimation(self.fig, self.animate, interval=1000)
+        plt.show()
+
+
+    def animate(self, i):
+        self.ax1.clear()
+        self.ax1.plot(self.datalist.get_channel(1))
 
 
     def plot(self):
@@ -184,7 +203,7 @@ class EEG(object):
                 data = socket.receive(length)
                 if data:
                     if data == "DONE":
-                        print('Finnished transmission')
+                        print('Finished transmission')
                         return True
                     self.add_data(data)
             else:
@@ -200,11 +219,15 @@ class EEG(object):
         channel = 0
         for index in range(self.length_size, len(rd)):
             # TODO find the status bit for loff-n and loff-p
+            #print(' '.join(rd))
+            for x in rd:
+                if len(rd) > 9000000:
+                    print(rd)
             channel += 1
             data = Data()
             data.set_channel(channel)
             data.set_data(rd[index])
-            data.display()
+            #data.display()
             self.datalist.add_data(data)
 
 
@@ -251,6 +274,8 @@ class EEG(object):
     def run(self):
         self.length_size = 3
         self.datalist = DataList()
+        # Should go in a thread
+        #self.setup_plot()
         socket = Socket('localhost', 8888)
 
         self.handle_arg(socket)

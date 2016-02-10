@@ -387,17 +387,19 @@ struct captureData capture_data() {
             cd.LOFF_STATP = transfer(0x00);
             cd.LOFF_STATN = transfer(0x00);
             cd.GPIO = transfer(0x00);
-            printf("%02X %02X %02X ",cd.LOFF_STATP, cd.LOFF_STATN, cd.GPIO);
+            printf("%02X %02X %02X - ",cd.LOFF_STATP, cd.LOFF_STATN, cd.GPIO);
 
             for (int i=1 ; i<=8 ; i++ ) {
 
                 ch_data = 0;
 
+                printf(" [");
                 for (int x=0 ; x<3 ; x++ ) {
                     data = transfer(0x00);
-                    printf("%02X ",data);
+                    printf("%02X",data);
                     ch_data = (ch_data<<8) | data;
                 };
+                printf("] ");
 
                 if (isPositive(ch_data)) {
                     // is positive value
@@ -493,13 +495,13 @@ int handleCommands(int socketfd) {
         else if (memcmp(bcommand, "NOISECHECK", 1) == 0 ) {
             msgInbound(bcommand);
             setupNoiseCheck();
-            sendData(socketfd, 1000);
+            sendData(socketfd, 10000);
         }
 
         else if (memcmp(bcommand, "TESTSIGNAL", 1) == 0 ) {
             msgInbound(bcommand);
             setupTestSignal();
-            sendData(socketfd, 1000);
+            sendData(socketfd, 10000);
         }
 
         else {
