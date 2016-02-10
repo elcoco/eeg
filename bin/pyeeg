@@ -1,0 +1,269 @@
+#!/usr/bin/python3
+
+try:
+    import sys,os
+    import matplotlib.pyplot as plt
+
+    import socket
+    import select
+except ImportError as e:
+    print('failed to import: {0}'.format(e))
+    sys.exit()
+
+
+class Data(object):
+    def __init__(self):
+        # TODO: create a method to create a filename with date_increasing number
+        self.write_path = '/home/eco/usb/data.txt'
+        self.channel = False
+        self.data = False
+        self.timestamp = False
+        self.loff_p = True
+        self.loff_n = True
+
+
+    def set_channel(self, channel): self.channel = channel
+    def set_data(self, data): self.data = data
+    def set_timestamp(self, timestamp): self.timestamp = timestamp
+    def set_loff_n(self, state): self.loff_n = state
+    def set_loff_p(self, state): self.loff_p = state
+    def get_channel(self): return self.channel
+    def get_data(self): return self.data
+    def get_timestamp(self): return self.timestamp
+    def get_loff_p(self): return self.loff_p
+    def get_loff_n(self): return self.loff_n
+
+
+    def get(self):
+        return self.data
+
+
+    def create_file(self):
+        """ Create a file if it doesn't exist """
+        try:
+            with open(self.write_path) as f: pass
+        except IOError as e:
+            try:
+                FILE = open(self.write_path, 'w')
+                FILE.close()
+            except IOError as e:
+                print('WARNING ... Couldn\'t create file \'%s\''%self.write_path)
+                return False
+        return True
+
+
+    def write(self):
+        """ Write data to file """
+        if self.create_file():
+            try:
+                FILE = open(self.write_path, 'a')
+                FILE.write(self.data)
+                FILE.close()
+            except:
+                print('Failed to write to file')
+
+
+    def display(self):
+        print(self.get_channel(), self.get_data())
+
+
+
+class DataList(object):
+    def __init__(self):
+        self.data = []
+
+
+    def get_data_list(self): return self.data
+    def add_data(self, data): self.data.append(data)
+
+
+    def get_channel(self, channel):
+        return_list = []
+        for data in self.get_data_list():
+            if int(data.get_channel()) == int(channel):
+                return_list.append(data.get_data())
+        return return_list
+
+
+
+class Socket(object):
+    def __init__(self, host, port):
+        try:
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            print('Client socket created')
+        except socket.error:
+            print('Failed to create client socket')
+            sys.exit()
+        #self.socket = socket.socket()
+        #self.socket.settimeout(20)
+        try:
+            self.socket.connect((host, port))
+            print('Connected to server')
+        except socket.error:
+            print('Failed to connect to server')
+            sys.exit()
+
+
+    def send(self, data, prefix=False):
+        # TODO check if connection is still alive
+        if prefix:
+            data = str(len(data)).rjust(3, '0') + data
+
+        data = data.encode()
+
+        try:
+            self.socket.sendall(data)
+            return True
+        except:
+            print('Failed to send data')
+            return False
+
+
+    def receive(self, bits):
+        # TODO check if connection is still alive
+        try:
+            data = self.socket.recv(int(bits)).decode('utf-8')
+            return self.sanitize(data)
+        except:
+            print('Failed to receive data')
+        return False
+
+
+    def sanitize(self, data):
+        data = data.strip('\n')
+        return data
+
+
+
+class EEG(object):
+    def get_file(self, filename):
+        """ Get contents of a file and put every line in a list"""
+        contents = []
+        try:
+            f = open(filename, 'r')
+        except IOError as e:
+            print('No config file found at: {0}'.format(filename))
+            return False
+
+        for line in f:
+            if line:
+                contents.append(line)
+        f.close()
+
+        if contents:
+            return contents
+        return False
+
+
+    def setup_plot(self):
+        plt.title('Data for world domination!')
+        plt.ylabel('freq')
+        plt.xlabel('time')
+        #plt.axis([1,100,-8388607, 8388607])
+        plt.legend()
+
+
+
+    def plot(self):
+        lines = []
+        for i in range(1,9):
+            line = plt.plot(self.datalist.get_channel(i))
+            plt.setp(line, label='Channel' + str(i))
+            lines.append(line)
+        self.setup_plot()
+        plt.show()
+        return plt
+
+
+    def get_data(self, socket):
+        # Receive length of data first, then get the full frame 
+        while True:
+            length = socket.receive(self.length_size)
+            if length:
+                data = socket.receive(length)
+                if data:
+                    if data == "DONE":
+                        print('Finnished transmission')
+                        return True
+                    self.add_data(data)
+            else:
+                break
+        print('An error occured while transfer')
+        return False
+
+
+    def add_data(self, rd):
+        # Create data objects and add to self.datalist object
+        rd = rd.split(',')
+
+        channel = 0
+        for index in range(self.length_size, len(rd)):
+            # TODO find the status bit for loff-n and loff-p
+            channel += 1
+            data = Data()
+            data.set_channel(channel)
+            data.set_data(rd[index])
+            data.display()
+            self.datalist.add_data(data)
+
+
+    def noise_check(self, socket):
+        print("Doing noise check")
+        socket.send('NOISECHECK', prefix=True)
+        if not self.get_data(socket):
+            print("Failed to get some results")
+            return False
+        return True
+
+
+    def test_signal(self, socket):
+        print("Starting test signal")
+        socket.send('TESTSIGNAL', prefix=True)
+        if not self.get_data(socket):
+            print("Failed to get some results")
+            return False
+        return True
+
+
+    def usage(self):
+        print("usage")
+
+
+    def handle_arg(self, socket):
+        if len(sys.argv) < 2 or "--help" in sys.argv:
+            return self.usage()
+
+        for arg in sys.argv:
+            if "--noise-check" in arg:
+                return self.noise_check(socket)
+
+            elif "--test-signal" in arg:
+                return self.test_signal(socket)
+
+            elif "--shutdown" in arg:
+                return socket.send('SHUTDOWN', prefix=True)
+
+        print("No valid argument passed")
+        return False
+
+
+    def run(self):
+        self.length_size = 3
+        self.datalist = DataList()
+        socket = Socket('localhost', 8888)
+
+        self.handle_arg(socket)
+        socket.send("QUIT", prefix=True);
+
+        self.plot()
+
+
+
+"""
+
+"""
+
+
+app = EEG()
+app.run()

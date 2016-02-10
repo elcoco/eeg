@@ -1,0 +1,17 @@
+set autoscale													# autoscale the axes
+set title "Graphs for world domination and such"				
+set xlabel "Time (Hour:Minute:Second)"
+set ylabel "Temperature (Celcius)"
+set mytics 5													# set the minor tics in between the major tics
+set mxtics 5
+set grid xtics ytics mxtics mytics								# draw a grid on all the minor as well as the major tics
+
+set xdata time													# concider x axes data as time
+set timefmt "%d-%m-%Y,%H:%M:%S"									# tell gnuplot about the datafile format
+set format x "%H:%M:%S"											# set format for x axes as hours:minutes:seconds
+
+plot	"log" using 1:2 with lines title 'temperature', \
+		40 title 'Interesting but useless graph'
+pause 1
+replot															# make sure gnuplot liveupdates
+reread

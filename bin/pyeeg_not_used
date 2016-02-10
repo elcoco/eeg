@@ -1,0 +1,249 @@
+#!/usr/bin/python3
+
+try:
+    import sys,os
+    import spidev
+    import RPi.GPIO as GPIO
+    from time import sleep
+except ImportError as e:
+    print('failed to import: {0}'.format(e))
+    sys.exit()
+
+
+class SPI(object):
+    def __init__(self):
+        # SPI setup
+        spi_bus = 0
+        spi_device = 0
+        self.spi = spidev.SpiDev()
+        self.spi.open(spi_bus, spi_device)
+        self.spi.max_speed_hz = 976000
+        self.spi.mode = 1
+
+
+    def send(self, data):
+        #return self.spi.xfer2(data)
+        return self.spi.xfer(data)
+
+
+    def receive(self):
+        pass
+
+
+    def close(self):
+        self.spi.close()
+
+
+
+class Data(object):
+    def __init__(self, data):
+        # TODO: create a method to create a filename with date_increasing number
+        self.data = data
+        self.write_path = '/home/eco/eegdata'
+
+
+
+    def get(self):
+        return self.data
+
+
+
+    def create_file(self):
+        """ Create a file if it doesn't exist """
+        try:
+            with open(self.write_path) as f: pass
+        except IOError as e:
+            try:
+                FILE = open(self.write_path, 'w')
+                FILE.close()
+            except IOError as e:
+                print('WARNING ... Couldn\'t create file \'%s\''%self.write_path)
+                return False
+        return True
+
+
+
+    def write(self):
+        """ Write data to file """
+        if self.create_file():
+            try:
+                FILE = open(self.write_path, 'a')
+                FILE.write(self.data)
+                FILE.close()
+            except:
+                print('Failed to write to file')
+
+
+
+    def display(self):
+        print(self.data)
+
+
+
+class ADS1299(object):
+    def __init__(self):
+        #GPIO PINS:
+        self.pin_pwdn   = 14 # Pin 8 on RPI2
+        self.pin_reset  = 15 # Pin 10 on RPI2
+        self.pin_drdy   = 16 # Pin 36 on RPI2
+        self.pin_button = 4  # Pin 7 on RPI2
+
+
+        self.OC_WAKEUP  = 0x02
+        self.OC_STANDBY = 0x04
+        self.OC_RESET   = 0x06
+        self.OC_START   = 0x08
+        self.OC_STOP    = 0x0A
+        self.OC_RDATAC  = 0x10
+        self.OC_SDATAC  = 0x11
+        self.OC_RDATA   = 0x12
+        self.OC_RREG    = 0x20
+        self.OC_WREG    = 0x40
+
+        self.REG_ID          = 0x00
+        self.REG_CONFIG1     = 0x01
+        self.REG_CONFIG2     = 0x02
+        self.REG_CONFIG3     = 0x03
+        self.REG_LOFF        = 0x04
+        self.REG_CH1SET      = 0x05
+        self.REG_CH2SET      = 0x06
+        self.REG_CH3SET      = 0x07
+        self.REG_CH4SET      = 0x08
+        self.REG_CH5SET      = 0x09
+        self.REG_CH6SET      = 0x0A
+        self.REG_CH7SET      = 0x0B
+        self.REG_CH8SET      = 0x0C
+        self.REG_BIAS_SENSP  = 0x0D
+        self.REG_BIAS_SENSN  = 0x0E
+        self.REG_LOFF_SENSP  = 0x0F
+        self.REG_LOFF_SENSN  = 0x10
+        self.REG_LOFF_FLIP   = 0x11
+        self.REG_LOFF_STATP  = 0x12
+        self.REG_LOFF_STATN  = 0x13
+        self.REG_GPIO        = 0x14
+        self.REG_MISC1       = 0x15
+        self.REG_MISC2       = 0x16
+        self.REG_CONFIG4     = 0x17
+
+
+    def setup(self):
+
+        self.spi = SPI()
+        #GPIO init
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(self.pin_pwdn, GPIO.OUT)
+        GPIO.setup(self.pin_reset, GPIO.OUT)
+        GPIO.setup(self.pin_button, GPIO.OUT)
+        GPIO.setup(self.pin_drdy, GPIO.IN)
+
+
+    def boot(self):
+        #All input Signals LOW
+        GPIO.output(self.pin_pwdn, False)
+        GPIO.output(self.pin_button, False)
+        GPIO.output(self.pin_reset, False)
+
+        # wait for one second
+        sleep(1)
+
+        #!PWDN HIGH, !RESET = HIGH
+        GPIO.output(self.pin_pwdn, True)
+        GPIO.output(self.pin_reset, True)
+
+        # wait for one second (power-on reset and oscillator start-up)
+        sleep(1)
+
+        self.reset()
+        sleep(1)
+        self.set_sdatac()
+        sleep(1)
+        self.set_internal_ref()
+        sleep(1)
+
+        # See page 58
+
+        # Write registers
+        # set start
+        # set rdatac
+        # capture data and check noise
+        # set test signals
+        # capture data and test signal
+
+
+    def write(self, register, bit, value):
+        pass
+
+
+    def set_rdatac(self):
+        print('Setting RDATAC')
+        data = Data(self.spi.send([self.OC_RDATAC]))
+        data.display()
+        sleep(1)
+
+
+    def set_sdatac(self):
+        # Device wakes up in RDATAC (read data continuous) mode so we can't send further commands
+        # so send SDATAC (stop read data continuous)
+        print('Setting SDATAC so registers can be written')
+        data = Data(self.spi.send([0x11]))
+        #data = Data(self.spi.send([0x01, 0x01]))
+        data.display()
+
+
+    def set_internal_ref(self):
+        # Using internal reference, send: WREG CONFIG3 E0h
+        self.spi.send([self.REG_CONFIG3, 0xE0])
+
+
+    def start(self):
+        # Send START opcode
+        print('Setting START')
+        self.spi.send([self.OC_START])
+
+
+    def reset(self):
+        #!RESET LOW
+        GPIO.output(self.pin_reset, False)
+        sleep(0.5)
+
+        #!RESET HIGH
+        GPIO.output(self.pin_reset, True)
+        sleep(1)
+
+
+    def shutdown(self):
+        print('shutting down SPI')
+        # Send STOP opcode
+        print('Setting STOP')
+        self.spi.send([self.OC_STOP])
+        self.spi.close()
+
+
+    def hello_world(self):
+        #READ REGISTER 00
+        # Bits to Send: 0010 0000 0000 0000 -> 32, 0
+        print('Sending Hello World')
+        
+        
+        #data = Data(self.spi.send([32,0]))
+        print(self.spi.send([self.OC_RREG + 0x00, self.REG_ID]))
+        data = Data(self.spi.send([0x00]))
+        data.display()
+        try:
+            sleep(1000)
+        except:
+            pass
+
+
+
+class EEG(object):
+    def run(self):
+        ADS = ADS1299()
+        ADS.setup()
+        ADS.boot()
+        ADS.hello_world()
+        ADS.shutdown()
+
+
+app = EEG()
+app.run()

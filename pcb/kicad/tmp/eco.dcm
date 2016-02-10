@@ -1,0 +1,33 @@
+EESchema-DOCLIB  Version 2.0
+#
+$CMP AGND
+K POWER, PWR
+$ENDCMP
+#
+$CMP AVDD
+K POWER, PWR
+$ENDCMP
+#
+$CMP AVSS
+K POWER, PWR
+$ENDCMP
+#
+$CMP DGND
+K POWER, PWR
+$ENDCMP
+#
+$CMP DVDD
+K POWER, PWR
+$ENDCMP
+#
+$CMP GNDREF
+K POWER, PWR
+$ENDCMP
+#
+$CMP LM1085_5v_3A
+D Linear Regulator (adjustable)
+K POWER REGUL
+F regulator/lm117.pdf
+$ENDCMP
+#
+#End Doc Library

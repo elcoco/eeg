@@ -1,0 +1,6 @@
+set title "log"
+set xlabel "Time (s)"
+set ylabel "Angle (mrad)"
+set grid
+plot "log" title ""
+
