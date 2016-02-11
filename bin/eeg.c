@@ -9,6 +9,7 @@
 #include <sys/types.h> 
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <fcntl.h>
 
 int main();
 int boot();
@@ -435,8 +436,11 @@ int sendData(int socketfd) {
     char out2[500];
     int status;
     char command[256];
+    char data[256];
 
-    // NOTE: Channel 8 data is incorrect and the rest is zero
+    // Make socket non-blocking
+    status = fcntl(socketfd, F_SETFL, fcntl(socketfd, F_GETFL, 0) | O_NONBLOCK);
+
     while (1) {
         struct captureData cd = capture_data();
         sprintf(out, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", cd.LOFF_STATP, \
@@ -452,6 +456,9 @@ int sendData(int socketfd) {
                                                          cd.CH8_DATA);
 
         sprintf(out2, "%03d%s", strlen(out), out);
+        get_data(socketfd, data);
+        if (strcmp(data, "STOP") == 0)
+            return 0;
         if (write(socketfd, out2, strlen(out2)) == -1) {
             return 1;
         };
@@ -498,7 +505,7 @@ int handleCommands(int socketfd) {
         // Use memcmp() instead of strcmp() if string is not \0 terminated
         if (memcmp(data, "QUIT", 1) == 0 ) {
             msgInbound(data);
-            running  = 1;
+            return 0;
         }
 
         else if (memcmp(data, "SHUTDOWN", 1) == 0 ) {
@@ -509,16 +516,18 @@ int handleCommands(int socketfd) {
         else if (memcmp(data, "NOISECHECK", 1) == 0 ) {
             msgInbound(data);
             setupNoiseCheck();
-            running = sendData(socketfd);
+            sendData(socketfd);
             transfer(OP.STOP);
+            return 0;
 
         }
 
         else if (memcmp(data, "TESTSIGNAL", 1) == 0 ) {
             msgInbound(data);
             setupTestSignal();
-            running = sendData(socketfd);
+            sendData(socketfd);
             transfer(OP.STOP);
+            return 0;
         }
 
         else {
