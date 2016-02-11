@@ -6,6 +6,7 @@ try:
 #    import matplotlib.animation as animation
 #    from matplotlib import style
 
+    import datetime
     import socket
     import select
 
@@ -488,14 +489,13 @@ class Data(object):
         self.write_path = '/home/eco/usb/data.txt'
         self.channel = False
         self.data = False
-        self.timestamp = False
+        self.timestamp = self.get_timestamp()
         self.loff_p = True
         self.loff_n = True
 
 
     def set_channel(self, channel): self.channel = channel
     def set_data(self, data): self.data = data
-    def set_timestamp(self, timestamp): self.timestamp = timestamp
     def set_loff_n(self, state): self.loff_n = state
     def set_loff_p(self, state): self.loff_p = state
     def get_channel(self): return self.channel
@@ -504,6 +504,11 @@ class Data(object):
     def get_loff_p(self): return self.loff_p
     def get_loff_n(self): return self.loff_n
 
+    def get_timestamp(self):
+        t= datetime.datetime.today()
+        time = "{0} {1}:{2}:{3}:{4}".format(t.day, t.hour, t.minute, t.second, int(t.microsecond/1000))
+        # TODO time must fill with zeros
+        return time
 
     def get(self):
         return self.data
@@ -535,7 +540,7 @@ class Data(object):
 
 
     def display(self):
-        log.info(self.get_channel(), self.get_data())
+        log.info("{0} {1} {2}".format(self.get_timestamp(), self.get_channel(), self.get_data()))
 
 
 
@@ -673,7 +678,7 @@ class EEG(object):
             if length:
                 data = socket.receive(length)
                 if data:
-                    log.info('<<< {0}{1}'.format(length,data))
+                    #log.info('<<< {0}{1}'.format(length,data))
                     if data == "DONE":
                         log.info('Finished transmission')
                         return True
@@ -708,6 +713,7 @@ class EEG(object):
             data = Data()
             data.set_channel(channel)
             data.set_data(rd[index])
+            data.display()
             self.datalist.add_data(data)
 
 
@@ -792,7 +798,10 @@ class EEG(object):
 
         self.handle_arg()
 
-        #self.plot()
+        self.plot()
+        # NOTE C side doesn't stop when plot is running
+        # NOTE Live updating plot
+        # NOTE add timestamp to data
 
 
 
