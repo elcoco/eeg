@@ -367,10 +367,8 @@ int closeSPI() {
 
 
 struct captureData capture_data() {
-    // read 24 + n x 24 SCLK's (page 58)
-    // 24 status bits + 24 bits * 8 channels (page 27)
-    // dus resolutie van 24 bit (3 byte)
-    // format of 24 status bits = 1100 + LOF_STATP + LOFF_STATN + bits[4:7] of GPIO register
+    // Capture data from ADS1299
+    // 3 * 3 bytes (LOFF_STATP, LOFF_STATN, GPIO) + (3 bytes * 8 channels) (page 27)
     uint8_t data;
     int LOFF_STATP;
     int LOFF_STATN;
@@ -378,7 +376,6 @@ struct captureData capture_data() {
     int ch_data;
     struct captureData cd;
     int in_loop = 0;
-
 
     while (in_loop == 0) {
         if (dataReady()) {
@@ -401,13 +398,10 @@ struct captureData capture_data() {
                 };
                 printf("] ");
 
-                if (isPositive(ch_data)) {
-                    // is positive value
-                }
-                else {
+                if (!isPositive(ch_data)) {
+                    // is negative value
                     int mapped_data = map(ch_data, 16777215, 8388608, 1, 8388607);
                     ch_data = mapped_data * -1;
-                    // is negative value
                 }
 
                 if (i == 1)
@@ -428,13 +422,14 @@ struct captureData capture_data() {
                     cd.CH8_DATA = ch_data;
             };
             printf("\n");
-        }
+        };
     };
     return cd;
 };
 
 
 int sendData(int socketfd, int frames) {
+    // Send data to client
     char out[500];
     char out2[500];
     int status;

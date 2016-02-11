@@ -250,7 +250,11 @@ class EEG(object):
 
 
     def usage(self):
-        print("usage")
+        print("PYEEG")
+        print("OPTIONS:")
+        print("  --noise-check")
+        print("  --test-signal")
+        print("  --shutdown")
 
 
     def handle_arg(self, socket):
@@ -276,7 +280,7 @@ class EEG(object):
         self.datalist = DataList()
         # Should go in a thread
         #self.setup_plot()
-        socket = Socket('192.168.1.29', 8888)
+        socket = Socket('alarmpi', 8888)
         #socket = Socket('localhost', 8888)
 
         self.handle_arg(socket)
