@@ -495,13 +495,13 @@ int handleCommands(int socketfd) {
         else if (memcmp(bcommand, "NOISECHECK", 1) == 0 ) {
             msgInbound(bcommand);
             setupNoiseCheck();
-            sendData(socketfd, 10000);
+            sendData(socketfd, 1000);
         }
 
         else if (memcmp(bcommand, "TESTSIGNAL", 1) == 0 ) {
             msgInbound(bcommand);
             setupTestSignal();
-            sendData(socketfd, 10000);
+            sendData(socketfd, 1000);
         }
 
         else {
