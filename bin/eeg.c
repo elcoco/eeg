@@ -430,6 +430,20 @@ struct captureData capture_data() {
 };
 
 
+int setBlocking(int socketfd, int blocking) {
+    // 0 = nonblocking, 1 = blocking
+    int flags = fcntl(socketfd, F_GETFL, 0);
+    if (flags == -1)
+        return 0;
+
+    if (blocking)
+        flags &= ~O_NONBLOCK;
+    else
+        flags |= O_NONBLOCK;
+    return fcntl(socketfd, F_SETFL, flags) != -1;
+};
+
+
 int sendData(int socketfd) {
     // Send RDATAC data to client
     char out[500];
@@ -440,6 +454,7 @@ int sendData(int socketfd) {
 
     // Make socket non-blocking
     status = fcntl(socketfd, F_SETFL, fcntl(socketfd, F_GETFL, 0) | O_NONBLOCK);
+    setBlocking(socketfd, 0);
 
     while (1) {
         struct captureData cd = capture_data();
@@ -458,8 +473,11 @@ int sendData(int socketfd) {
         sprintf(out2, "%03d%s", strlen(out), out);
         get_data(socketfd, data);
         if (strcmp(data, "STOP") == 0)
+            status = fcntl(socketfd, F_SETFL, fcntl(socketfd, F_GETFL, 0) | O_NONBLOCK);
+            setBlocking(socketfd, 1);
             return 0;
         if (write(socketfd, out2, strlen(out2)) == -1) {
+            setBlocking(socketfd, 1);
             return 1;
         };
     };
