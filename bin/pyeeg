@@ -549,17 +549,24 @@ class DataList(object):
         self.data = []
 
 
-    def get_data_list(self): return self.data
+    def get_timestamp_list(self): return self.data
     def add_data(self, data): self.data.append(data)
 
 
-    def get_channel(self, channel):
+    def get_data_list(self, channel):
         return_list = []
-        for data in self.get_data_list():
+        for data in self.data():
             if int(data.get_channel()) == int(channel):
                 return_list.append(data.get_data())
         return return_list
 
+
+    def get_timestamp_list(self, channel):
+        return_list = []
+        for data in self.data():
+            if int(data.get_channel()) == int(channel):
+                return_list.append(data.get_timestamp())
+        return return_list
 
 
 class Socket(object):
@@ -662,7 +669,7 @@ class EEG(object):
     def plot(self):
         lines = []
         for i in range(1,9):
-            line = plt.plot(self.datalist.get_channel(i))
+            line = plt.plot(self.datalist.get_data_list(i), self.datalist.get_timestamp_list)
             plt.setp(line, label='Channel' + str(i))
             lines.append(line)
         self.setup_plot()
