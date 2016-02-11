@@ -2,12 +2,16 @@
 
 try:
     import sys,os
-    import matplotlib.pyplot as plt
-    import matplotlib.animation as animation
-    from matplotlib import style
+#    import matplotlib.pyplot as plt
+#    import matplotlib.animation as animation
+#    from matplotlib import style
 
     import socket
     import select
+
+    import inspect
+    import re
+    from time import strftime
 except ImportError as e:
     print('failed to import: {0}'.format(e))
     sys.exit()
@@ -514,7 +518,7 @@ class Data(object):
                 FILE = open(self.write_path, 'w')
                 FILE.close()
             except IOError as e:
-                print('WARNING ... Couldn\'t create file \'%s\''%self.write_path)
+                log.error('WARNING ... Couldn\'t create file \'%s\''%self.write_path)
                 return False
         return True
 
@@ -527,11 +531,11 @@ class Data(object):
                 FILE.write(self.data)
                 FILE.close()
             except:
-                print('Failed to write to file')
+                log.error('Failed to write to file')
 
 
     def display(self):
-        print(self.get_channel(), self.get_data())
+        log.info(self.get_channel(), self.get_data())
 
 
 
@@ -558,17 +562,17 @@ class Socket(object):
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            print('Client socket created')
+            log.info('Client socket created')
         except socket.error:
-            print('Failed to create client socket')
+            log.error('Failed to create client socket')
             sys.exit()
         #self.socket = socket.socket()
         #self.socket.settimeout(20)
         try:
             self.socket.connect((host, port))
-            print('Connected to server')
+            log.info('Connected to server')
         except socket.error:
-            print('Failed to connect to server')
+            log.error('Failed to connect to server')
             sys.exit()
 
 
@@ -577,13 +581,14 @@ class Socket(object):
         if prefix:
             data = str(len(data)).rjust(3, '0') + data
 
-        data = data.encode()
+        data_bytes = data.encode()
 
         try:
-            self.socket.sendall(data)
+            self.socket.sendall(data_bytes)
+            log.info('>>> {0}'.format(data))
             return True
         except:
-            print('Failed to send data')
+            log.error('Failed to send data')
             return False
 
 
@@ -593,7 +598,7 @@ class Socket(object):
             data = self.socket.recv(int(bits)).decode('utf-8')
             return self.sanitize(data)
         except:
-            print('Failed to receive data')
+            log.error('Failed to receive data')
         return False
 
 
@@ -610,7 +615,7 @@ class EEG(object):
         try:
             f = open(filename, 'r')
         except IOError as e:
-            print('No config file found at: {0}'.format(filename))
+            log.error('No config file found at: {0}'.format(filename))
             return False
 
         for line in f:
@@ -662,19 +667,30 @@ class EEG(object):
 
     def get_data(self, socket):
         # Receive length of data first, then get the full frame 
+        start_time = self.get_timestamp()
         while True:
-            length = socket.receive(self.length_size)
+            length = socket.receive(config.get('general', 'length-size'))
             if length:
                 data = socket.receive(length)
                 if data:
+                    log.info('<<< {0}{1}'.format(length,data))
                     if data == "DONE":
-                        print('Finished transmission')
+                        log.info('Finished transmission')
                         return True
                     self.add_data(data)
             else:
                 break
-        print('An error occured while transfer')
+
+            if start_time + int(config.get('general', 'run-time')) <= self.get_timestamp():
+                log.info('Run time reached')
+                return True
+
+        log.error('An error occured while transfer')
         return False
+
+
+    def get_timestamp(self):
+        return int(strftime("%d%H%M%S"))
 
 
     def add_data(self, rd):
@@ -682,34 +698,33 @@ class EEG(object):
         rd = rd.split(',')
 
         channel = 0
-        for index in range(self.length_size, len(rd)):
+        for index in range(config.get('general', 'length-size'), len(rd)):
             # TODO find the status bit for loff-n and loff-p
-            #print(' '.join(rd))
+            #log.info(' '.join(rd))
             for x in rd:
-                if len(rd) > 9000000:
-                    print(rd)
+                if len(rd) > 9000000 or len(rd) < -9000000:
+                    log.red('High value: {0}'.format(rd))
             channel += 1
             data = Data()
             data.set_channel(channel)
             data.set_data(rd[index])
-            #data.display()
             self.datalist.add_data(data)
 
 
     def noise_check(self, socket):
-        print("Doing noise check")
+        log.info("Doing noise check")
         socket.send('NOISECHECK', prefix=True)
         if not self.get_data(socket):
-            print("Failed to get some results")
+            log.error("Failed to get some results")
             return False
         return True
 
 
     def test_signal(self, socket):
-        print("Starting test signal")
+        log.info("Starting test signal")
         socket.send('TESTSIGNAL', prefix=True)
         if not self.get_data(socket):
-            print("Failed to get some results")
+            log.error("Failed to get some results")
             return False
         return True
 
@@ -722,43 +737,72 @@ class EEG(object):
         print("  --shutdown")
 
 
-    def handle_arg(self, socket):
+    def set_config_defaults(self):
+        config.set('server', 'address', 'alarmpi')
+        config.set('server', 'port', '8888')
+        config.set('general', 'length-size', '3')
+        config.set('general', 'run-time', '60')
+
+
+    def change_config_value(self, var, section, key):
+        var_split = var.split('=')
+        if len(var_split) == 2:
+            config.set(section, key, var_split[1])
+
+
+    def handle_arg(self):
         if len(sys.argv) < 2 or "--help" in sys.argv:
             return self.usage()
 
+        # Setting config values
+        for arg in sys.argv:
+            if '--run-time=' in arg:
+                self.change_config_value(arg, 'general', 'run-time')
+
+            elif '--server-address=' in arg:
+                self.change_config_value(arg, 'server', 'address')
+
+            elif '--server-port=' in arg:
+                self.change_config_value(arg, 'server', 'port')
+
+
+        # Create socket
+        self.socket = Socket(config.get('server', 'address'), config.get('server', 'port'))
+
+        # Commands
         for arg in sys.argv:
             if "--noise-check" in arg:
-                return self.noise_check(socket)
+                return self.noise_check(self.socket)
 
             elif "--test-signal" in arg:
-                return self.test_signal(socket)
+                return self.test_signal(self.socket)
 
             elif "--shutdown" in arg:
-                return socket.send('SHUTDOWN', prefix=True)
+                return self.socket.send('SHUTDOWN', prefix=True)
 
-        print("No valid argument passed")
+        log.error("No valid argument passed")
         return False
 
 
     def run(self):
-        self.length_size = 3
+        self.set_config_defaults()
         self.datalist = DataList()
         # Should go in a thread
         #self.setup_plot()
-        socket = Socket('alarmpi', 8888)
-        #socket = Socket('localhost', 8888)
 
-        self.handle_arg(socket)
-        socket.send("QUIT", prefix=True);
+        self.handle_arg()
 
-        self.plot()
+        #self.plot()
 
 
 
 """
 
 """
-
-
-app = EEG()
-app.run()
+if __name__ == "__main__":
+    config = Config()
+    log = Log()
+    log.color('>>>', 'green')
+    log.color('<<<', 'blue')
+    app = EEG()
+    app.run()

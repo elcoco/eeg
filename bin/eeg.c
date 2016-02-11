@@ -24,7 +24,8 @@ uint8_t wreg(uint8_t, uint8_t);
 void startSocket(int*, int*);
 int msgInbound(char[256]);
 int msgOutbound(char[256]);
-int sendData(int,int);
+int sendData(int);
+char * get_data(int, char *);
 //unsigned int capture_data();
 
 /*
@@ -428,14 +429,15 @@ struct captureData capture_data() {
 };
 
 
-int sendData(int socketfd, int frames) {
-    // Send data to client
+int sendData(int socketfd) {
+    // Send RDATAC data to client
     char out[500];
     char out2[500];
     int status;
+    char command[256];
 
     // NOTE: Channel 8 data is incorrect and the rest is zero
-    for (int i=0 ; i<frames ; i++) {
+    while (1) {
         struct captureData cd = capture_data();
         sprintf(out, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", cd.LOFF_STATP, \
                                                          cd.LOFF_STATN, \
@@ -450,9 +452,11 @@ int sendData(int socketfd, int frames) {
                                                          cd.CH8_DATA);
 
         sprintf(out2, "%03d%s", strlen(out), out);
-        status = write(socketfd, out2, strlen(out2));
+        if (write(socketfd, out2, strlen(out2)) == -1) {
+            return 1;
+        };
     };
-    status = write(socketfd, "004DONE", 7);
+    //status = write(socketfd, "004DONE", 7);
 };
 
 
@@ -466,42 +470,64 @@ int msgOutbound(char msg[256]) {;
 }
 
 
+
+char * get_data(int socketfd, char *msg) {
+    int length;
+    // Get data from socket
+    if ((recv(socketfd, msg, 3, 0)) > 0) {
+        // Convert string to int
+        length = atoi(msg);
+        // Reset buffers
+        bzero((char *) msg, sizeof(msg));
+        // Get data
+        recv(socketfd, msg, length, 0);
+        msgInbound(msg);
+        return msg;
+    };
+
+}
+
 int handleCommands(int socketfd) {
-    char bcommand[256];
     int read_size;
+    char data[256];
+    int running = 0;
 
-    while ((read_size = recv(socketfd, bcommand, 3, 0)) > 0) {
-        int length = atoi(bcommand);
-        bzero((char *) bcommand, sizeof(bcommand));
-
-        read_size = recv(socketfd, bcommand, length, 0);
+    while (running == 0) {
+        get_data(socketfd, data);
 
         // Use memcmp() instead of strcmp() if string is not \0 terminated
-        if (memcmp(bcommand, "QUIT", 1) == 0 ) {
-            msgInbound(bcommand);
-            return 0;
+        if (memcmp(data, "QUIT", 1) == 0 ) {
+            msgInbound(data);
+            running  = 1;
         }
 
-        if (memcmp(bcommand, "SHUTDOWN", 1) == 0 ) {
-            msgInbound(bcommand);
+        else if (memcmp(data, "SHUTDOWN", 1) == 0 ) {
+            msgInbound(data);
             return 1;
         }
 
-        else if (memcmp(bcommand, "NOISECHECK", 1) == 0 ) {
-            msgInbound(bcommand);
+        else if (memcmp(data, "NOISECHECK", 1) == 0 ) {
+            msgInbound(data);
             setupNoiseCheck();
-            sendData(socketfd, 1000);
+            running = sendData(socketfd);
+            transfer(OP.STOP);
+
         }
 
-        else if (memcmp(bcommand, "TESTSIGNAL", 1) == 0 ) {
-            msgInbound(bcommand);
+        else if (memcmp(data, "TESTSIGNAL", 1) == 0 ) {
+            msgInbound(data);
             setupTestSignal();
-            sendData(socketfd, 1000);
+            running = sendData(socketfd);
+            transfer(OP.STOP);
         }
 
         else {
-            msgInbound(bcommand);
+            msgInbound(data);
         };
+
+        printf("Connection is broken\n");
+
+        strcpy(data, "");
 
 
     };
