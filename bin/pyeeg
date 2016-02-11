@@ -13,6 +13,471 @@ except ImportError as e:
     sys.exit()
 
 
+
+class Log(object):
+    def __init__(self, logfile=False, level='debug', display=True, maxlength=20):
+        self.logfile = logfile
+        self.display = display
+        self.level = level
+        self.maxlength = maxlength
+
+        self.colors = { 'red'    : '\033[31m',
+                        'white'  : '\033[37m',
+                        'gray'   : '\033[0m',
+                        'orange' : '\033[33m',
+                        'blue'   : '\033[34m',
+                        'green'  : '\033[32m',
+                        'reset'  : '\033[0m' }
+
+        self.colors_levels = { 'info'    : 'white',
+                               'error'   : 'red',
+                               'debug'   : 'gray',
+                               'warning' : 'orange' }
+
+        self.custom_highlights = {}
+
+
+    def choose_show(self, level):
+        """ Decide if a message should be shown based on configured message level """
+        if self.level == 'error' and (level == 'debug' or level == 'warning' or level == 'info'):
+            return False
+        if self.level == 'warning' and (level =='debug' or level == 'info'):
+            return False
+        if self.level == 'info' and (level == 'debug'):
+            return False
+        return True
+
+
+    def create_message(self, level, module, message):
+        # TODO: Add feature to detect lists/dicts and print them out nicely
+        if self.choose_show(level):
+            message = self.detect_type(message)
+            module_justified = module.ljust(self.maxlength)
+            level_justified = level.ljust(7)
+
+            if self.display:
+                """
+                print("{0} {1}{2}{3}{4} {5} {6} {7}".format(strftime("%H:%M:%S"),
+                                                            self.colors[self.colors_levels[level]],
+                                                            level_justified.upper(),
+                                                            self.colors['reset'],
+                                                            module_justified,
+                                                            self.colors[self.colors_levels[level]],
+                                                            self.custom_highlight(message, self.colors[self.colors_levels[level]]),
+                                                            self.colors['reset']))
+                """
+
+                print("{0} {1} {2} {3}".format(module_justified,
+                                               self.colors[self.colors_levels[level]],
+                                               self.custom_highlight(message, self.colors[self.colors_levels[level]]),
+                                               self.colors['reset']))
+
+            if self.logfile:
+                self.write_to_file("{0} {1}{2}{3}\n".format(strftime("%Y-%m-%d %H:%M:%S"),
+                                                            level_justified,
+                                                            module_justified,
+                                                            message))
+
+
+    def detect_type(self, message):
+        """ Detect whether message is list or dict """
+        if type(message) == list:
+            message = ' , '.join(message)
+        elif type(message) == dict:
+            message_out = ''
+            for k,v in message.items():
+                message_out = "{0}\n{1} : {2}".format(message_out,k,v)
+            message = message_out
+        return message
+
+
+    def create_file(self):
+        """ Create a file if it doesn't exist """
+        try:
+            with open(self.logfile) as f: pass
+        except IOError as e:
+            try:
+                FILE = open(self.logfile, 'w')
+                FILE.close()
+            except IOError as e:
+                print('WARNING ... Couldn\'t create file \'%s\' Not writing logs!'%self.logfile)
+                return False
+        return True
+
+
+    def write_to_file(self, message):
+        if self.create_file():
+            try:
+                FILE = open(self.logfile, 'a')
+                FILE.write(message)
+                FILE.close()
+            except:
+                print('Failed to write to logfile')
+
+
+    def custom_highlight(self, message, reset_color):
+        if message:
+            for string, color in self.custom_highlights.items():
+                message = re.sub( string, self.colors[color] + string + reset_color, message)
+        return message
+
+
+    def color(self, string, color):
+        """ Callable method to add a custom highlight eg. ( log.color('what_to_highlight', 'color_to_use') ) """
+        self.custom_highlights[string] = color
+
+
+    def info(self, message):
+        self.create_message('info', inspect.stack()[1][3], message)
+
+
+    def debug(self, message):
+        self.create_message('debug', inspect.stack()[1][3], message)
+
+
+    def warning(self, message):
+        self.create_message('warning', inspect.stack()[1][3], message)
+
+
+    def error(self, message):
+        self.create_message('error', inspect.stack()[1][3], message)
+
+
+    def red(self, message):
+        self.create_message('info', inspect.stack()[1][3], message)
+
+
+    def blue(self, message):
+        self.create_message('info', inspect.stack()[1][3], message)
+
+
+    def green(self, message):
+        self.create_message('info', inspect.stack()[1][3], message)
+
+
+    def orange(self, message):
+        self.create_message('info', inspect.stack()[1][3], message)
+
+
+
+class Config_Option(object):
+    """ Helper class of Config() """
+    def __init__(self, section=False, comment=[], key=False, value=False):
+        self.section = section
+        self.key = key
+        self.value = value
+        if comment:
+            if type(comment) == list:
+                self.comment = comment
+            else:
+                self.comment = [comment]
+        else:
+            self.comment = []
+
+    def set_comment(self, comment): 
+        if type(comment) == list:
+            self.comment = comment
+        else:
+            self.comment = [comment]
+
+    def set_section(self, section): self.section = section
+    def set_key(self, key): self.key = value
+    def set_value(self, value): self.value = value
+    def get_section(self): return self.section
+    def get_comment(self): return self.comment
+    def get_key(self): return self.key
+    def get_value(self): return self.value
+
+
+
+class Config(object):
+    def __init__(self, quiet=False):
+        self.config_file_path = False
+        # This list stores all config option objects
+        self.config = []
+        # display errrors
+        self.quiet = quiet
+
+
+    def set_option(self, option): self.config.append(option)
+    def set_config_path(self, path): self.config_file_path = path
+    def get_options(self): return sorted(self.config, key=lambda x: x.get_section(), reverse=False)
+    def get_config_path(self): return self.config_file_path
+
+
+    def test_float(self, var):
+        try:
+            return float(var)
+        except:
+            return False
+
+
+    def test_int(self, var):
+        try:
+            return int(var)
+        except:
+            return False
+
+
+    def convert_numbers(self, var):
+        """ Convert strings or lists of numbers to floats or ints """
+        # var is a list
+        if type(var) == list:
+
+            for x in range(0, len(var)):
+                if self.test_int(var[x]):
+                    var[x] = self.test_int(var[x])
+                elif self.test_float(var[x]):
+                    var[x] = self.test_float(var[x])
+
+        # Var is not a list
+        else:
+            if self.test_int(var):
+                var = int(var)
+            elif self.test_float(var):
+                var = float(var)
+
+        return var
+
+
+    def parse_file(self, path):
+        """ Parse file and create a list with option objects """
+
+        # Get config file contents in a list
+        section = False
+        comments = []
+
+        config_file = self.get_file()
+
+        if not config_file:
+            return False
+
+        for line in config_file:
+            # clean line from whitespaces, newlines etc
+            line = self.sanitize(line)
+
+            # Line is empty, do nothing
+            if not line:
+                pass
+
+            # Line is commented
+            elif line[0] == '#':
+                comments.append(self.sanitize(line[1:]))
+
+            # Line is a section header
+            elif line[0] == '[' and line[-1] == ']':
+                section = self.sanitize(line, extra_opts = ['[', ']'])
+
+            # We are in a section loop
+            elif section:
+
+                # Line is a key/value pair
+                if '=' in line:
+                    k,v = line.split('=', 1)
+                    k = self.sanitize(k)
+                    v = self.sanitize(v)
+
+                    # replace certain values like ~ -> /home/<user>
+                    v = self.replace(v)
+                    # TODO Find a solution for this, the replaced variable should not be written back to the file
+                    #      Also does this not work for variables set by config.set()
+
+                    # Value is empty, add empty value
+                    if not v:
+                        option = self.set(section, k, '', comment=comments)
+                        comments = []
+
+
+                    # Value is a list
+                    elif v[0] == '[' and v[-1] == ']':
+                        v = self.sanitize(v, extra_opts = ['[', ']'])
+
+                        # Value contains a comma. read all values in a list
+                        if ',' in v:
+                            v_list = self.sanitize_list(v.split(','))
+                            option = self.set(section, k, v_list, comment=comments)
+                            comments = []
+
+
+                        # Value doesn't contain comma so could be a list with a single item or an empty list
+                        else:
+                            if v:
+                                option = self.set(section, k, v, comment=comments)
+                            else:
+                                option = self.set(section, k, [], comment=comments)
+                            comments = []
+
+                    # Value is a simple key, value pair
+                    else:
+                        option = self.set(section, k, v, comment=comments)
+                        comments = []
+
+        return self.config
+
+
+    def set(self, section, k, v, comment=[]):
+        """ Create a config_option() instance and fill it with data """
+        v = self.convert_numbers(v)
+        # If option already exist, change it
+        for option in self.get_options():
+            if option.get_section() == section:
+                if option.get_key() == k:
+                    option.set_comment(comment)
+                    option.set_value(v)
+                    return option
+        # If option does not exist, create it
+        option = Config_Option(key=k, value=v, section=section, comment=comment)
+        self.set_option(option)
+        return option
+
+
+    def get(self, section, key):
+        """ Get a value from list of config_option() instances in self.config by section and key """
+        for option in self.get_options():
+            if option.get_section() == section:
+                if option.get_key() == key:
+                    return option.get_value()
+        if not self.quiet:
+            print('Couldn\'t find value for key in section {0} : {1}'.format(section, key))
+        return False
+
+
+    def test_file(self):
+        """ Test if file exists """
+        try:
+            with open(self.config_file_path) as f: pass
+            return True
+        except IOError as e:
+            return False
+
+
+    def ensure_dir(self, dirname):
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+
+
+    def write_to_file(self, data=False, remove=False):
+        """ Write a string to a file, remove file if it exists by giving remove=False """
+        if not self.get_config_path():
+            return False
+
+        self.ensure_dir(os.path.dirname(self.get_config_path()))
+
+        if remove == True:
+            try:
+                FILE = open(self.config_file_path, 'w')
+                FILE.close()
+                return True
+            except:
+                if not self.quiet:
+                    print('Failed to remove file')
+                return False
+
+        else:
+            try:
+                FILE = open(self.config_file_path, 'a')
+                FILE.write(data + '\n')
+                FILE.close()
+                return True
+            except:
+                if not self.quiet:
+                    print('Failed to write to file')
+                pass
+        return False
+
+
+    def write(self):
+        """ Write the config to disk """
+
+        self.write_to_file(remove=True)
+        section = False
+        first = True
+
+        for option in self.get_options():
+            current_section = option.get_section()
+
+            if not current_section == section:
+                # Only put newline above section header if it is not the first one
+                if first:
+                    self.write_to_file('[{0}]'.format(current_section))
+                    first = False
+                else:
+                    self.write_to_file('\n[{0}]'.format(current_section))
+                section = current_section
+
+            comment = option.get_comment()
+            for c in comment:
+                self.write_to_file('# {0}'.format(c))
+
+            value = option.get_value()
+            if type(value) == list:
+                value = '[{0}]'.format(','.join(value))
+
+            self.write_to_file('{0} = {1}'.format(option.get_key(),value))
+        if not self.quiet:
+            print('File written to: {0}'.format(self.config_file_path))
+
+
+    def get_file(self):
+        """ Get contents of a file and put every line in a list"""
+        contents = []
+        try:
+            f = open(self.config_file_path, 'r')
+        except IOError as e:
+            if not self.quiet:
+                print('No config file found at: {0}'.format(self.config_file_path))
+            return False
+
+        for line in f:
+            if line:
+                contents.append(self.sanitize(line))
+        f.close()
+
+        if contents:
+            return contents
+        return False
+
+
+    def sanitize(self, data, extra_opts = []):
+        """ Clean variable from newlines, leading/trailing spaces and other stuff """
+        sanitize_list = [' ', '\'', '\"', '\n'] + extra_opts
+        for sanitize in sanitize_list:
+            data = data.strip(sanitize)
+        return data
+
+
+    def sanitize_list(self, data):
+        """ Clean list indices from newlines, leading/trailing spaces and other stuff """
+        output = []
+        for x in data:
+            x = x.strip()
+            x = x.strip('\'')
+            x = x.strip('\"')
+            x = x.strip('\n')
+            x = x.strip('[')
+            x = x.strip(']')
+            output.append(x)
+        data = output[:]
+        return data
+
+
+    def replace(self, data):
+        """ Replace characters or strings in a string with something else """
+        replace_list = {'~' : os.getenv("HOME"), '<HOSTNAME>' : socket.gethostname()}
+        for k,v in replace_list.items():
+            data = data.replace(k, v)
+        return data
+
+
+    def parse(self):
+        # Parse the config file
+        if self.parse_file(self.config_file_path):
+            return True
+        return False
+
+
+
+
 class Data(object):
     def __init__(self):
         # TODO: create a method to create a filename with date_increasing number
