@@ -456,7 +456,8 @@ int sendData(int socketfd) {
     data[0] = '\0';
 
     // Make socket non-blocking, otherwise the loop would hang on the get_data() function call
-    status = fcntl(socketfd, F_SETFL, fcntl(socketfd, F_GETFL, 0) | O_NONBLOCK);
+    //status = fcntl(socketfd, F_SETFL, fcntl(socketfd, F_GETFL, 0) | O_NONBLOCK);
+    setBlocking(socketfd, 0);
 
     while (1) {
         struct captureData cd = capture_data();
@@ -476,13 +477,15 @@ int sendData(int socketfd) {
         get_data(socketfd, data);
         if (strcmp(data, "STOP") == 0) {
             //Make socket blocking again
-            status = fcntl(socketfd, F_SETFL, fcntl(socketfd, F_GETFL, 0) & ~O_NONBLOCK);
+            //status = fcntl(socketfd, F_SETFL, fcntl(socketfd, F_GETFL, 0) & ~O_NONBLOCK);
+            setBlocking(socketfd, 1);
             return 0;
         };
 
         if (write(socketfd, out2, strlen(out2)) == -1) {
             // Make socket blocking again
-            status = fcntl(socketfd, F_SETFL, fcntl(socketfd, F_GETFL, 0) & ~O_NONBLOCK);
+            //status = fcntl(socketfd, F_SETFL, fcntl(socketfd, F_GETFL, 0) & ~O_NONBLOCK);
+            setBlocking(socketfd, 1);
             return 1;
         };
     };
