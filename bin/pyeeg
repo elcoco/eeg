@@ -2,6 +2,11 @@
 
 try:
     import sys,os
+    import matplotlib.pyplot as plt
+    import matplotlib.animation as animation
+    import matplotlib.dates as dates
+    from matplotlib import style
+
 
     import datetime
     import socket
@@ -657,11 +662,6 @@ class EEG(object):
 
 
     def plot(self):
-        import matplotlib.pyplot as plt
-        import matplotlib.animation as animation
-        import matplotlib.dates as dates
-        from matplotlib import style
-
         lines = []
         for i in range(1,9):
             d = self.datalist.get_timestamp_list(i)
@@ -806,16 +806,11 @@ class EEG(object):
 
         self.handle_arg()
 
-        #self.plot()
-        # NOTE C side doesn't stop when plot is running
+        self.plot()
         # NOTE Live updating plot
-        # NOTE add timestamp to data
 
 
 
-"""
-
-"""
 if __name__ == "__main__":
     config = Config()
     log = Log()

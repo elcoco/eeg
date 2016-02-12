@@ -243,7 +243,6 @@ int setupTestSignal() {
     // Set Start = 1, DRDY should now toggle when data is available
     transfer(OP.START);
 
-    printf(">>%d<<\n",bcm2835_gpio_lev(PIN.dataready));
     // Put chip in RDATAC mode
     transfer(OP.RDATAC);
 };
@@ -456,7 +455,6 @@ int sendData(int socketfd) {
     data[0] = '\0';
 
     // Make socket non-blocking, otherwise the loop would hang on the get_data() function call
-    //status = fcntl(socketfd, F_SETFL, fcntl(socketfd, F_GETFL, 0) | O_NONBLOCK);
     setBlocking(socketfd, 0);
 
     while (1) {
@@ -477,14 +475,12 @@ int sendData(int socketfd) {
         get_data(socketfd, data);
         if (strcmp(data, "STOP") == 0) {
             //Make socket blocking again
-            //status = fcntl(socketfd, F_SETFL, fcntl(socketfd, F_GETFL, 0) & ~O_NONBLOCK);
             setBlocking(socketfd, 1);
             return 0;
         };
 
         if (write(socketfd, out2, strlen(out2)) == -1) {
             // Make socket blocking again
-            //status = fcntl(socketfd, F_SETFL, fcntl(socketfd, F_GETFL, 0) & ~O_NONBLOCK);
             setBlocking(socketfd, 1);
             return 1;
         };
@@ -524,7 +520,10 @@ int handleCommands(int socketfd) {
     char data[256];
     int running = 0;
 
-    while (running == 0) {
+    while (1) {
+        // Clear string
+        data[0] = '\0';
+
         get_data(socketfd, data);
 
         // Use memcmp() instead of strcmp() if string is not \0 terminated
@@ -541,7 +540,6 @@ int handleCommands(int socketfd) {
             sendData(socketfd);
             transfer(OP.STOP);
             return 0;
-
         }
 
         else if (memcmp(data, "TESTSIGNAL", 1) == 0 ) {
@@ -556,12 +554,11 @@ int handleCommands(int socketfd) {
         };
 
         printf("Connection is broken\n");
-
-        strcpy(data, "");
-
+        return 0;
 
     };
     return 0;
+    data[0] = '\0';
 };
 
 
