@@ -452,9 +452,11 @@ int sendData(int socketfd) {
     char command[256];
     char data[256];
 
-    // Make socket non-blocking
+    // Clear string
+    data[0] = '\0';
+
+    // Make socket non-blocking, otherwise the loop would hang on the get_data() function call
     status = fcntl(socketfd, F_SETFL, fcntl(socketfd, F_GETFL, 0) | O_NONBLOCK);
-    setBlocking(socketfd, 0);
 
     while (1) {
         struct captureData cd = capture_data();
@@ -472,16 +474,18 @@ int sendData(int socketfd) {
 
         sprintf(out2, "%03d%s", strlen(out), out);
         get_data(socketfd, data);
-        if (strcmp(data, "STOP") == 0)
-            status = fcntl(socketfd, F_SETFL, fcntl(socketfd, F_GETFL, 0) | O_NONBLOCK);
-            setBlocking(socketfd, 1);
+        if (strcmp(data, "STOP") == 0) {
+            //Make socket blocking again
+            status = fcntl(socketfd, F_SETFL, fcntl(socketfd, F_GETFL, 0) & ~O_NONBLOCK);
             return 0;
+        };
+
         if (write(socketfd, out2, strlen(out2)) == -1) {
-            setBlocking(socketfd, 1);
+            // Make socket blocking again
+            status = fcntl(socketfd, F_SETFL, fcntl(socketfd, F_GETFL, 0) & ~O_NONBLOCK);
             return 1;
         };
     };
-    //status = write(socketfd, "004DONE", 7);
 };
 
 
@@ -522,17 +526,14 @@ int handleCommands(int socketfd) {
 
         // Use memcmp() instead of strcmp() if string is not \0 terminated
         if (memcmp(data, "QUIT", 1) == 0 ) {
-            msgInbound(data);
             return 0;
         }
 
         else if (memcmp(data, "SHUTDOWN", 1) == 0 ) {
-            msgInbound(data);
             return 1;
         }
 
         else if (memcmp(data, "NOISECHECK", 1) == 0 ) {
-            msgInbound(data);
             setupNoiseCheck();
             sendData(socketfd);
             transfer(OP.STOP);
@@ -541,7 +542,6 @@ int handleCommands(int socketfd) {
         }
 
         else if (memcmp(data, "TESTSIGNAL", 1) == 0 ) {
-            msgInbound(data);
             setupTestSignal();
             sendData(socketfd);
             transfer(OP.STOP);

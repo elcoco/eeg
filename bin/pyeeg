@@ -2,10 +2,6 @@
 
 try:
     import sys,os
-    import matplotlib.pyplot as plt
-    import matplotlib.animation as animation
-    import matplotlib.dates as dates
-    from matplotlib import style
 
     import datetime
     import socket
@@ -661,6 +657,11 @@ class EEG(object):
 
 
     def plot(self):
+        import matplotlib.pyplot as plt
+        import matplotlib.animation as animation
+        import matplotlib.dates as dates
+        from matplotlib import style
+
         lines = []
         for i in range(1,9):
             d = self.datalist.get_timestamp_list(i)
@@ -777,7 +778,6 @@ class EEG(object):
             elif '--server-port=' in arg:
                 self.change_config_value(arg, 'server', 'port')
 
-
         # Create socket
         self.socket = Socket(config.get('server', 'address'), config.get('server', 'port'))
 
@@ -795,7 +795,6 @@ class EEG(object):
             if "--plot" in arg:
                 self.plot()
 
-        log.error("No valid argument passed")
         return False
 
 
