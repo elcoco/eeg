@@ -4,6 +4,7 @@ try:
     import sys,os
     from matplotlib import style
 
+    import threading
 
     import datetime
     import socket
@@ -15,6 +16,20 @@ try:
 except ImportError as e:
     print('failed to import: {0}'.format(e))
     sys.exit()
+
+
+class StoppableThread(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.stop_flag = threading.Event()
+
+    def stop(self):
+        if self.isAlive() == True:
+            self.stop_flag.set()
+
+    def stopped(self):
+        return self.stop_flag.is_set()
+
 
 
 class Log(object):
@@ -610,6 +625,49 @@ class Socket(object):
 
 
 
+class PlotThread(StoppableThread):
+    def __init__(self):
+        StoppableThread.__init__(self)
+
+
+    def setup(self):
+        pass
+
+
+    def plot(self):
+        pass
+
+
+    def animate(self, i):
+        self.ax1.clear()
+        self.ax1.plot(self.datalist.get_channel(1))
+
+
+    def plot(self):
+        import matplotlib.pyplot as plt
+        import matplotlib.animation as animation
+        import matplotlib.dates as dates
+
+        lines = []
+        for i in range(1,9):
+            d = self.datalist.get_timestamp_list(i)
+            d = dates.date2num(d)
+            line = plt.plot(d, self.datalist.get_data_list(i))
+            #line = plt.plot(self.datalist.get_data_list(i))
+            #line = plt.plot(self.datalist.get_data_list(i), self.datalist.get_timestamp_list(i))
+            plt.setp(line, label='Channel' + str(i))
+            lines.append(line)
+        self.setup_plot()
+        plt.show()
+        return plt
+
+
+    def run(self):
+        print('lkjj')
+        self.plot()
+
+
+
 class EEG(object):
     def get_file(self, filename):
         """ Get contents of a file and put every line in a list"""
@@ -650,6 +708,16 @@ class EEG(object):
         self.ax1 = self.fig.add_subplot(1,1,1)
         ani = animation.FuncAnimation(self.fig, self.animate, interval=1000)
         plt.show()
+
+
+    def start_threads(self):
+        self.running_threads = []
+        self.running_threads.append(PlotThread().start())
+
+
+    def stop_threads(self):
+        for thread in self.running_threads:
+            thread.stop()
 
 
     def animate(self, i):
@@ -737,6 +805,13 @@ class EEG(object):
     def ch1(self, socket):
         log.info("Doing noise check")
         socket.send('CHNSET,1,1', prefix=True)
+        socket.send('CHNSET,2,0', prefix=True)
+        socket.send('CHNSET,3,1', prefix=True)
+        socket.send('CHNSET,4,0', prefix=True)
+        socket.send('CHNSET,5,0', prefix=True)
+        socket.send('CHNSET,6,0', prefix=True)
+        socket.send('CHNSET,7,0', prefix=True)
+        socket.send('CHNSET,8,0', prefix=True)
         if not self.get_data(socket):
             log.error("Failed to get some results")
             return False
@@ -812,6 +887,7 @@ class EEG(object):
 
 
     def run(self):
+        self.start_threads()
         self.set_config_defaults()
         self.datalist = DataList()
         # Should go in a thread

@@ -28,6 +28,7 @@ int msgInbound(char[256]);
 int msgOutbound(char[256]);
 int sendData(int);
 char * get_data(int, char *);
+int chnset(int, int);
 //unsigned int capture_data();
 
 /*
@@ -213,36 +214,6 @@ int setupNoiseCheck() {
     wreg(REG.CH6SET,  0x01);
     wreg(REG.CH7SET,  0x01);
     wreg(REG.CH8SET,  0x01);
-
-    // Set Start = 1, DRDY should now toggle when data is available
-    transfer(OP.START);
-
-    // Put chip in RDATAC mode
-    transfer(OP.RDATAC);
-};
-
-
-int setupCH1Signal() {
-    // Stop DATAC mode
-    transfer(OP.SDATAC);
-
-    // Routing all negative inputs to SRB1
-    wreg(REG.MISC1, 0x20);
-
-    // Power up sequence diagram from page 58 tells me to write some registers
-    // They seem to be the default values but I'll do it anyways because I want to be good obviously.
-    wreg(REG.CONFIG1, 0x96);
-    wreg(REG.CONFIG2, 0xC0);
-
-    // Short all the inputs
-    wreg(REG.CH1SET,  0x60);
-    wreg(REG.CH2SET,  0xE0);
-    wreg(REG.CH3SET,  0xE0);
-    wreg(REG.CH4SET,  0xE0);
-    wreg(REG.CH5SET,  0xE0);
-    wreg(REG.CH6SET,  0xE0);
-    wreg(REG.CH7SET,  0xE0);
-    wreg(REG.CH8SET,  0xE0);
 
     // Set Start = 1, DRDY should now toggle when data is available
     transfer(OP.START);
@@ -480,7 +451,7 @@ int sendData(int socketfd) {
     char out2[500];
     int status;
     char command[256];
-    char data[25];
+    char data[20];
 
     // Clear string
     data[0] = '\0';
@@ -529,7 +500,6 @@ int msgOutbound(char msg[256]) {;
 }
 
 
-
 char * get_data(int socketfd, char *msg) {
     int length;
     // Get data from socket
@@ -547,9 +517,50 @@ char * get_data(int socketfd, char *msg) {
 }
 
 
+int chnset(int channel, int state) {
+    printf("%d - %d\n", channel, state);
+    if (state == 1) { 
+        if (channel == 1)
+            wreg(REG.CH1SET,  0x60);
+        else if (channel == 2)
+            wreg(REG.CH2SET,  0x60);
+        else if (channel == 3)
+            wreg(REG.CH2SET,  0x60);
+        else if (channel == 4)
+            wreg(REG.CH2SET,  0x60);
+        else if (channel == 5)
+            wreg(REG.CH2SET,  0x60);
+        else if (channel == 6)
+            wreg(REG.CH2SET,  0x60);
+        else if (channel == 7)
+            wreg(REG.CH2SET,  0x60);
+        else if (channel == 8)
+            wreg(REG.CH2SET,  0x60);
+    }
+    else {
+        if (channel == 1)
+            wreg(REG.CH1SET,  0xE0);
+        else if (channel == 2)
+            wreg(REG.CH2SET,  0xE0);
+        else if (channel == 3)
+            wreg(REG.CH2SET,  0xE0);
+        else if (channel == 4)
+            wreg(REG.CH2SET,  0xE0);
+        else if (channel == 5)
+            wreg(REG.CH2SET,  0xE0);
+        else if (channel == 6)
+            wreg(REG.CH2SET,  0xE0);
+        else if (channel == 7)
+            wreg(REG.CH2SET,  0xE0);
+        else if (channel == 8)
+            wreg(REG.CH2SET,  0xE0);
+    };
+};
+
+
 int handleCommands(int socketfd) {
     int read_size;
-    char data[25];
+    char data[20];
     int running = 0;
 
     while (1) {
@@ -558,8 +569,34 @@ int handleCommands(int socketfd) {
 
         get_data(socketfd, data);
 
+        // Change settings
+        if (memcmp(data, "CHNSET", 1) == 0 ) {
+            char *opt;
+            int i = 0;
+            int channel;
+            int state;
+            printf("data: %s\n", data);
+
+            opt = strtok(data, ",");
+            while (opt != NULL) {
+                i++;
+                printf("%d >> %d\n", i, opt);
+                if (i == 2)
+                    channel = *opt;
+                    printf("channel %d\n", opt);
+                if (i == 3)
+                    state = *opt;
+                    printf("state %d\n", state);
+                    printf("klaar dr mee\n");
+                    break;
+                opt = strtok(NULL, ",");
+            };
+            chnset(channel, state);
+        }
+
+        // Send commands
         // Use memcmp() instead of strcmp() if string is not \0 terminated
-        if (memcmp(data, "QUIT", 1) == 0 ) {
+        else if (memcmp(data, "QUIT", 1) == 0 ) {
             return 0;
         }
 
@@ -578,37 +615,6 @@ int handleCommands(int socketfd) {
             setupTestSignal();
             sendData(socketfd);
             transfer(OP.STOP);
-            return 0;
-        }
-        else if (memcmp(data, "CHNSET", 1) == 0 ) {
-            char *opt;
-            opt = strtok(data, ",");
-            int i = 0;
-
-            while (opt != NULL) {
-                i++;
-                opt = strtok(NULL, ",");
-                };
-
-            if (i == 1) {
-                printf("is 1 \n");
-            };
-            if (i == 2) {
-                printf("is 2 \n");
-            };
-            if (i == 3) {
-                printf("is 3 \n");
-            };
-
-            while (opt != NULL) {
-                opt = strtok(NULL, ",");
-                if (opt != NULL)
-                    printf(">> %s\n", opt);
-                };
-
-            //setupCH1Signal();
-            //sendData(socketfd);
-            //transfer(OP.STOP);
             return 0;
         }
 
