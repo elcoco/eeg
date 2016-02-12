@@ -18,6 +18,7 @@ int startSPI();
 int closeSPI();
 int setupNoiseCheck();
 int setupTestSignal();
+int setupCH1Signal();
 int handleCommands(int);
 uint8_t transfer(uint8_t);
 uint8_t rreg(uint8_t);
@@ -212,6 +213,36 @@ int setupNoiseCheck() {
     wreg(REG.CH6SET,  0x01);
     wreg(REG.CH7SET,  0x01);
     wreg(REG.CH8SET,  0x01);
+
+    // Set Start = 1, DRDY should now toggle when data is available
+    transfer(OP.START);
+
+    // Put chip in RDATAC mode
+    transfer(OP.RDATAC);
+};
+
+
+int setupCH1Signal() {
+    // Stop DATAC mode
+    transfer(OP.SDATAC);
+
+    // Routing all negative inputs to SRB1
+    wreg(REG.MISC1, 0x20);
+
+    // Power up sequence diagram from page 58 tells me to write some registers
+    // They seem to be the default values but I'll do it anyways because I want to be good obviously.
+    wreg(REG.CONFIG1, 0x96);
+    wreg(REG.CONFIG2, 0xC0);
+
+    // Short all the inputs
+    wreg(REG.CH1SET,  0x60);
+    wreg(REG.CH2SET,  0xE0);
+    wreg(REG.CH3SET,  0xE0);
+    wreg(REG.CH4SET,  0xE0);
+    wreg(REG.CH5SET,  0xE0);
+    wreg(REG.CH6SET,  0xE0);
+    wreg(REG.CH7SET,  0xE0);
+    wreg(REG.CH8SET,  0xE0);
 
     // Set Start = 1, DRDY should now toggle when data is available
     transfer(OP.START);
@@ -449,7 +480,7 @@ int sendData(int socketfd) {
     char out2[500];
     int status;
     char command[256];
-    char data[256];
+    char data[25];
 
     // Clear string
     data[0] = '\0';
@@ -515,9 +546,10 @@ char * get_data(int socketfd, char *msg) {
 
 }
 
+
 int handleCommands(int socketfd) {
     int read_size;
-    char data[256];
+    char data[25];
     int running = 0;
 
     while (1) {
@@ -546,6 +578,37 @@ int handleCommands(int socketfd) {
             setupTestSignal();
             sendData(socketfd);
             transfer(OP.STOP);
+            return 0;
+        }
+        else if (memcmp(data, "CHNSET", 1) == 0 ) {
+            char *opt;
+            opt = strtok(data, ",");
+            int i = 0;
+
+            while (opt != NULL) {
+                i++;
+                opt = strtok(NULL, ",");
+                };
+
+            if (i == 1) {
+                printf("is 1 \n");
+            };
+            if (i == 2) {
+                printf("is 2 \n");
+            };
+            if (i == 3) {
+                printf("is 3 \n");
+            };
+
+            while (opt != NULL) {
+                opt = strtok(NULL, ",");
+                if (opt != NULL)
+                    printf(">> %s\n", opt);
+                };
+
+            //setupCH1Signal();
+            //sendData(socketfd);
+            //transfer(OP.STOP);
             return 0;
         }
 
