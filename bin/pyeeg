@@ -743,7 +743,7 @@ class EEG(object):
             length = self.socket.receive(config.get('general', 'length-size'))
             if length:
                 # then get the full frame 
-                self.add_data(self.socket.receive(lenth))
+                self.add_data(self.socket.receive(length))
             else:
                 log.error('Error getting data')
                 return False
@@ -856,11 +856,11 @@ class EEG(object):
                 self.get_data()
 
             elif "--noise-check" in arg:
-                socket.send('NOISECHECK', prefix=True)
+                self.socket.send('NOISECHECK', prefix=True)
                 self.get_data()
 
             elif "--test-signal" in arg:
-                socket.send('TESTSIGNAL', prefix=True)
+                self.socket.send('TESTSIGNAL', prefix=True)
                 self.get_data()
 
             elif "--shutdown" in arg:

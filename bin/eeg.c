@@ -380,6 +380,7 @@ struct captureData capture_data() {
     struct captureData cd;
     int in_loop = 0;
 
+
     while (in_loop == 0) {
         if (dataReady()) {
             in_loop = 1;
@@ -472,19 +473,21 @@ int sendData(int socketfd) {
                                                          cd.CH6_DATA, \
                                                          cd.CH7_DATA, \
                                                          cd.CH8_DATA);
-
         sprintf(out2, "%03d%s", strlen(out), out);
-        get_data(socketfd, data);
-        if (strcmp(data, "STOP") == 0) {
-            //Make socket blocking again
-            setBlocking(socketfd, 1);
-            return 0;
-        };
 
         if (write(socketfd, out2, strlen(out2)) == -1) {
+            printf("could not write\n");
             // Make socket blocking again
             setBlocking(socketfd, 1);
             return 1;
+        };
+            
+        get_data(socketfd, data);
+        if (memcmp(data, "STOP", 4) == 0) {
+            //Make socket blocking again
+            printf("Send Stop\n");
+            setBlocking(socketfd, 1);
+            return 0;
         };
     };
 };
@@ -525,17 +528,17 @@ int chnset(int channel, int state) {
         else if (channel == 2)
             wreg(REG.CH2SET,  0x60);
         else if (channel == 3)
-            wreg(REG.CH2SET,  0x60);
+            wreg(REG.CH3SET,  0x60);
         else if (channel == 4)
-            wreg(REG.CH2SET,  0x60);
+            wreg(REG.CH4SET,  0x60);
         else if (channel == 5)
-            wreg(REG.CH2SET,  0x60);
+            wreg(REG.CH5SET,  0x60);
         else if (channel == 6)
-            wreg(REG.CH2SET,  0x60);
+            wreg(REG.CH6SET,  0x60);
         else if (channel == 7)
-            wreg(REG.CH2SET,  0x60);
+            wreg(REG.CH7SET,  0x60);
         else if (channel == 8)
-            wreg(REG.CH2SET,  0x60);
+            wreg(REG.CH8SET,  0x60);
     }
     else {
         if (channel == 1)
@@ -543,17 +546,17 @@ int chnset(int channel, int state) {
         else if (channel == 2)
             wreg(REG.CH2SET,  0xE0);
         else if (channel == 3)
-            wreg(REG.CH2SET,  0xE0);
+            wreg(REG.CH3SET,  0xE0);
         else if (channel == 4)
-            wreg(REG.CH2SET,  0xE0);
+            wreg(REG.CH4SET,  0xE0);
         else if (channel == 5)
-            wreg(REG.CH2SET,  0xE0);
+            wreg(REG.CH5SET,  0xE0);
         else if (channel == 6)
-            wreg(REG.CH2SET,  0xE0);
+            wreg(REG.CH6SET,  0xE0);
         else if (channel == 7)
-            wreg(REG.CH2SET,  0xE0);
+            wreg(REG.CH7SET,  0xE0);
         else if (channel == 8)
-            wreg(REG.CH2SET,  0xE0);
+            wreg(REG.CH8SET,  0xE0);
     };
 };
 
@@ -562,10 +565,9 @@ int handleCommands(int socketfd) {
     int read_size;
     // If garbage output it probably has something to do with string size
     char * data = malloc(25);
-    //char data[25];
-    int running = 0;
+    int running = 1;
 
-    while (1) {
+    while (running == 1) {
         // Clear string
         data[0] = '\0';
 
@@ -573,7 +575,7 @@ int handleCommands(int socketfd) {
         get_data(socketfd, data);
 
         // Change settings
-        if (memcmp(data, "CHNSET", 1) == 0 ) {
+        if (memcmp(data, "CHNSET", 6) == 0 ) {
             char * opt = malloc(25);
             int i = 0;
             int channel;
@@ -621,30 +623,31 @@ int handleCommands(int socketfd) {
 
         // Send commands
         // Use memcmp() instead of strcmp() if string is not \0 terminated
-        else if (memcmp(data, "QUIT", 1) == 0 ) {
+        else if (memcmp(data, "QUIT", 4) == 0 ) {
             return 0;
         }
 
-        else if (memcmp(data, "SHUTDOWN", 1) == 0 ) {
+        else if (memcmp(data, "SHUTDOWN", 8) == 0 ) {
             return 1;
         }
 
-        else if (memcmp(data, "NOISECHECK", 1) == 0 ) {
+        else if (memcmp(data, "NOISECHECK", 10) == 0 ) {
             setupNoiseCheck();
             sendData(socketfd);
             transfer(OP.STOP);
             return 0;
         }
 
-        else if (memcmp(data, "TESTSIGNAL", 1) == 0 ) {
+        else if (memcmp(data, "TESTSIGNAL", 10) == 0 ) {
             setupTestSignal();
             sendData(socketfd);
             transfer(OP.STOP);
             return 0;
         }
 
-        else if (memcmp(data, "START", 1) == 0 ) {
-            printf("HERE\n");
+        else if (memcmp(data, "START", 5) == 0 ) {
+            transfer(OP.START);
+            transfer(OP.RDATAC);
             sendData(socketfd);
             transfer(OP.STOP);
             return 0;
@@ -658,7 +661,7 @@ int handleCommands(int socketfd) {
             return 0;
         };
 
-    data[0] = '\0';
+        data[0] = '\0';
     };
     return 0;
 };
