@@ -7,9 +7,9 @@ try:
     import threading
     import matplotlib
 #    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    import matplotlib.animation as animation
-    import matplotlib.dates as dates
+#    import matplotlib.pyplot as plt
+#    import matplotlib.animation as animation
+#    import matplotlib.dates as dates
 
     import datetime
     import socket
@@ -566,7 +566,7 @@ class DataList(object):
         return_list = []
         for data in self.data:
             if int(data.get_channel()) == int(channel):
-                return_list.append(data.get_data())
+                return_list.append(data)
         return return_list
 
 
@@ -686,28 +686,6 @@ class EEG(object):
         return False
 
 
-    def setup_plot(self):
-        plt.title('Data for world domination!')
-        plt.ylabel('Volts')
-        plt.xlabel('Time')
-        plt.gcf().autofmt_xdate()   # Rotates/aligns the labels
-        plt.legend()
-        plt.show()
-
-
-    def setup_plot_bak(self):
-        #plt.title('Data for world domination!')
-        #plt.ylabel('freq')
-        #plt.xlabel('time')
-        #plt.legend()
-
-        style.use('fivethirtyeight')
-        self.fig = plt.figure()
-        self.ax1 = self.fig.add_subplot(1,1,1)
-        ani = animation.FuncAnimation(self.fig, self.animate, interval=1000)
-        plt.show()
-
-
     def start_threads(self):
         self.running_threads = []
         self.running_threads.append(PlotThread().start())
@@ -716,6 +694,16 @@ class EEG(object):
     def stop_threads(self):
         for thread in self.running_threads:
             thread.stop()
+
+
+
+    def setup_plot(self):
+        plt.title('Data for world domination!')
+        plt.ylabel('Volts')
+        plt.xlabel('Time')
+        plt.gcf().autofmt_xdate()   # Rotates/aligns the labels
+        plt.legend()
+        plt.show()
 
 
     def animate(self, i):
@@ -747,27 +735,24 @@ class EEG(object):
             plt.pause(0.01)
 
 
+
     def get_data(self):
-        # Receive length of data first, then get the full frame 
         start_time = self.get_timestamp()
         while True:
+            # Receive length of data first
             length = self.socket.receive(config.get('general', 'length-size'))
             if length:
-                data = self.socket.receive(length)
-                if data:
-                    #log.info('<<< {0}{1}'.format(length,data))
-                    if data == "DONE":
-                        log.info('Finished transmission')
-                        return True
-                    self.add_data(data)
+                # then get the full frame 
+                self.add_data(self.socket.receive(lenth))
             else:
-                break
+                log.error('Error getting data')
+                return False
 
+            # If run-time has reached, send the STOP command to the server
             if start_time + int(config.get('general', 'run-time')) <= self.get_timestamp():
                 log.info('Run time reached')
                 self.socket.send('STOP', prefix=True)
                 return True
-
 
         log.error('An error occured while transfer')
         return False
@@ -796,40 +781,24 @@ class EEG(object):
             datalist.add_data(data)
 
 
-    def noise_check(self, socket):
-        log.info("Doing noise check")
-        socket.send('NOISECHECK', prefix=True)
-        if not self.get_data():
-            log.error("Failed to get some results")
-            return False
-        return True
-
-
-
-    def chnset(self, var):
-        channels = var.split('=')
-        if len(channels) == 2:
-            channels = channels[1].split(',')
-
-        for channel in range(1,9):
-            active = False
-            for channel_active in channels:
-                if channel == int(channel_active):
-                    active = True
-            if active:
+    def send_channel_config(self):
+        for channel in range(1, 8+1):
+            state = config.get('channel' + str(channel), 'state')
+            if state == "on":
                 self.socket.send('CHNSET,{0},1'.format(channel), prefix=True)
             else:
                 self.socket.send('CHNSET,{0},0'.format(channel), prefix=True)
 
 
+    def set_channel_config(self, channels):
+        channels = channels.split(',')
+        channels = [ int(x) for x in channels ]
 
-    def test_signal(self, socket):
-        log.info("Starting test signal")
-        socket.send('TESTSIGNAL', prefix=True)
-        if not self.get_data():
-            log.error("Failed to get some results")
-            return False
-        return True
+        for channel in range(1, 8+1):
+            if channel in channels:
+                config.set('channel' + str(channel), 'state', 'on')
+            else:
+                config.set('channel' + str(channel), 'state', 'off')
 
 
     def usage(self):
@@ -845,12 +814,14 @@ class EEG(object):
         config.set('server', 'port', '8888')
         config.set('general', 'length-size', '3')
         config.set('general', 'run-time', '60')
-
-
-    def change_config_value(self, var, section, key):
-        var_split = var.split('=')
-        if len(var_split) == 2:
-            config.set(section, key, var_split[1])
+        config.set('channel1', 'state', 'on')
+        config.set('channel2', 'state', 'on')
+        config.set('channel3', 'state', 'on')
+        config.set('channel4', 'state', 'on')
+        config.set('channel5', 'state', 'on')
+        config.set('channel6', 'state', 'on')
+        config.set('channel7', 'state', 'on')
+        config.set('channel8', 'state', 'on')
 
 
     def handle_arg(self):
@@ -859,34 +830,41 @@ class EEG(object):
 
         # Setting config values
         for arg in sys.argv:
-            if '--run-time=' in arg:
-                self.change_config_value(arg, 'general', 'run-time')
 
-            elif '--server-address=' in arg:
-                self.change_config_value(arg, 'server', 'address')
+            if len(arg.split('=')) == 2:
+                key = arg.split('=')[0][2:]
+                value = arg.split('=')[1]
 
-            elif '--server-port=' in arg:
-                self.change_config_value(arg, 'server', 'port')
+                if '--run-time=' in arg:
+                    config.set('general', key, value)
 
-            elif '--channels=' in arg:
-                self.chnset(arg)
+                elif '--address=' in arg:
+                    config.set('server', key, value)
+
+                elif '--port=' in arg:
+                    config.set('server', key, value)
+
+                elif '--channels=' in arg:
+                    self.set_channel_config(value)
 
         # Commands
         for arg in sys.argv:
             if "--start" in arg:
                 # NOTE is not receiving on the c side!!
+                self.send_channel_config()
                 self.socket.send('START', prefix=True)
                 self.get_data()
 
-            if "--noise-check" in arg:
-                self.noise_check(self.socket)
+            elif "--noise-check" in arg:
+                socket.send('NOISECHECK', prefix=True)
+                self.get_data()
 
             elif "--test-signal" in arg:
-                self.test_signal(self.socket)
+                socket.send('TESTSIGNAL', prefix=True)
+                self.get_data()
 
             elif "--shutdown" in arg:
                 self.socket.send('SHUTDOWN', prefix=True)
-
 
             if "--plot" in arg:
                 self.plot()

@@ -514,7 +514,6 @@ char * get_data(int socketfd, char *msg) {
         msgInbound(msg);
         return msg;
     };
-
 }
 
 
@@ -643,16 +642,13 @@ int handleCommands(int socketfd) {
             transfer(OP.STOP);
             return 0;
         }
+
         else if (memcmp(data, "START", 1) == 0 ) {
             printf("HERE\n");
             sendData(socketfd);
             transfer(OP.STOP);
             return 0;
         }
-
-        else {
-            msgInbound(data);
-        };
 
         // Check if connection is broken
         char c;
