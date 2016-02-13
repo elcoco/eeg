@@ -2,14 +2,14 @@
 
 try:
     import sys,os
+
     from matplotlib import style
+    import matplotlib.pyplot as plt
+    import matplotlib.animation as animation
+    import matplotlib.dates as dates
+
 
     import threading
-    import matplotlib
-#    matplotlib.use("Agg")
-#    import matplotlib.pyplot as plt
-#    import matplotlib.animation as animation
-#    import matplotlib.dates as dates
 
     import datetime
     import socket
@@ -541,8 +541,10 @@ class Data(object):
         """ Write data to file """
         if self.create_file():
             try:
-                FILE = open(self.write_path, 'a')
-                FILE.write(self.data)
+                FILE = open(config.get('log', 'path'), 'a')
+                FILE.write("{0}, {1}, {2}\n".format(self.get_timestamp(), \
+                                                  self.get_channel(), \
+                                                  self.get_data()))
                 FILE.close()
             except:
                 log.error('Failed to write to file')
@@ -696,7 +698,6 @@ class EEG(object):
             thread.stop()
 
 
-
     def setup_plot(self):
         plt.title('Data for world domination!')
         plt.ylabel('Volts')
@@ -720,20 +721,22 @@ class EEG(object):
 
     def plot(self):
         plt.ion()
-        #self.fig = plt.figure()
-        #self.ax1 = self.fig.add_subplot(1,1,1)
-        xar = [1,3]
-        yar = [1,3]
-        graph = plt.plot(xar,yar)[0]
+        fig, ax = plt.subplots()
+
+        # set seconds
+        seconds = dates.SecondLocator()
+        ax.xaxis.set_major_locator(seconds)
+
+        xar = []
+        yar = []
 
         while True:
             for data in datalist.get_data_list(1):
                 xar.append(data.get_data())
                 yar.append(data.get_timestamp())
-            graph.set_ydata(yar)
+            ax.set_ydata(yar)
             plt.draw()
             plt.pause(0.01)
-
 
 
     def get_data(self):
@@ -777,6 +780,7 @@ class EEG(object):
             data = Data()
             data.set_channel(channel)
             data.set_data(rd[index])
+            data.write()
             #data.display()
             datalist.add_data(data)
 
@@ -822,6 +826,7 @@ class EEG(object):
         config.set('channel6', 'state', 'on')
         config.set('channel7', 'state', 'on')
         config.set('channel8', 'state', 'on')
+        config.set('log', 'path', '/home/eco/eeg.txt')
 
 
     def handle_arg(self):
@@ -847,8 +852,13 @@ class EEG(object):
                 elif '--channels=' in arg:
                     self.set_channel_config(value)
 
+
+
         # Commands
         for arg in sys.argv:
+            if "--plot" in arg:
+                self.plot()
+
             if "--start" in arg:
                 # NOTE is not receiving on the c side!!
                 self.send_channel_config()
@@ -866,9 +876,6 @@ class EEG(object):
             elif "--shutdown" in arg:
                 self.socket.send('SHUTDOWN', prefix=True)
 
-            if "--plot" in arg:
-                self.plot()
-
         return False
 
 
@@ -877,6 +884,7 @@ class EEG(object):
         self.set_config_defaults()
         # Should go in a thread
         #self.setup_plot()
+        #self.plot()
 
         # Create socket
         self.socket = Socket(config.get('server', 'address'), config.get('server', 'port'))
@@ -884,7 +892,6 @@ class EEG(object):
         #self.plot() 
         self.handle_arg()
 
-        #self.plot()
         # NOTE Live updating plot
 
 
