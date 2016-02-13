@@ -5,6 +5,11 @@ try:
     from matplotlib import style
 
     import threading
+    import matplotlib
+#    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.animation as animation
+    import matplotlib.dates as dates
 
     import datetime
     import socket
@@ -631,40 +636,33 @@ class PlotThread(StoppableThread):
 
 
     def setup(self):
-        pass
+        self.fig = plt.figure()
+        self.ax1 = self.fig.add_subplot(1,1,1)
 
 
-    def plot(self):
-        pass
+    def animate(self):
+        xar = []
+        yar = []
 
-
-    def animate(self, i):
+        for data in datalist.get_data_list():
+            xar.append(data.get_data())
+            yar.append(data.get_timestamp())
         self.ax1.clear()
-        self.ax1.plot(self.datalist.get_channel(1))
+        self.ax1.plot(xar,yar)
 
 
     def plot(self):
-        import matplotlib.pyplot as plt
-        import matplotlib.animation as animation
-        import matplotlib.dates as dates
-
-        lines = []
-        for i in range(1,9):
-            d = self.datalist.get_timestamp_list(i)
-            d = dates.date2num(d)
-            line = plt.plot(d, self.datalist.get_data_list(i))
-            #line = plt.plot(self.datalist.get_data_list(i))
-            #line = plt.plot(self.datalist.get_data_list(i), self.datalist.get_timestamp_list(i))
-            plt.setp(line, label='Channel' + str(i))
-            lines.append(line)
-        self.setup_plot()
+        self.setup()
+        ani = animation.FuncAnimation(self.fig, self.animate, interval=1000)
         plt.show()
-        return plt
+        print('lkjj')
 
 
     def run(self):
         print('lkjj')
         self.plot()
+        while True:
+            pass
 
 
 
@@ -721,28 +719,29 @@ class EEG(object):
 
 
     def animate(self, i):
+        xar = []
+        yar = []
+
+        for data in datalist.get_data_list(1):
+            xar.append(data.get_data())
+            yar.append(data.get_timestamp())
         self.ax1.clear()
-        self.ax1.plot(self.datalist.get_channel(1))
+        self.ax1.plot(xar,yar)
+        plt.draw()
 
 
     def plot(self):
-        import matplotlib.pyplot as plt
-        import matplotlib.animation as animation
-        import matplotlib.dates as dates
+        plt.ion()
+        #self.fig = plt.figure()
+        #self.ax1 = self.fig.add_subplot(1,1,1)
+        xar = []
+        yar = []
 
-        lines = []
-        for i in range(1,9):
-            d = self.datalist.get_timestamp_list(i)
-            d = dates.date2num(d)
-            line = plt.plot(d, self.datalist.get_data_list(i))
-            #line = plt.plot(self.datalist.get_data_list(i))
-            #line = plt.plot(self.datalist.get_data_list(i), self.datalist.get_timestamp_list(i))
-            plt.setp(line, label='Channel' + str(i))
-            lines.append(line)
-        self.setup_plot()
-        plt.show()
-        return plt
-
+        for data in datalist.get_data_list(1):
+            xar.append(data.get_data())
+            yar.append(data.get_timestamp())
+        graph = plt.plot(xar,yar)
+        plt.draw()
 
     def get_data(self, socket):
         # Receive length of data first, then get the full frame 
@@ -775,7 +774,7 @@ class EEG(object):
 
 
     def add_data(self, rd):
-        # Create data objects and add to self.datalist object
+        # Create data objects and add to datalist object
         rd = rd.split(',')
 
         channel = 0
@@ -790,7 +789,7 @@ class EEG(object):
             data.set_channel(channel)
             data.set_data(rd[index])
             #data.display()
-            self.datalist.add_data(data)
+            datalist.add_data(data)
 
 
     def noise_check(self, socket):
@@ -887,12 +886,12 @@ class EEG(object):
 
 
     def run(self):
-        self.start_threads()
+        #self.start_threads()
         self.set_config_defaults()
-        self.datalist = DataList()
         # Should go in a thread
         #self.setup_plot()
 
+        self.plot() 
         self.handle_arg()
 
         #self.plot()
@@ -902,6 +901,7 @@ class EEG(object):
 
 if __name__ == "__main__":
     config = Config()
+    datalist = DataList()
     log = Log()
     log.color('>>>', 'green')
     log.color('<<<', 'blue')
