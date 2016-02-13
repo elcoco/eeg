@@ -584,8 +584,10 @@ int handleCommands(int socketfd) {
 
             while (opt != NULL) {
                 i++;
-                if (i == 4)
+                if (i == 4) {
+                    printf("break\n");
                     break;
+                }
 
                 if (i == 2) {
                     if (memcmp(opt, "1", 1) == 0)
