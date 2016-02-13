@@ -765,7 +765,7 @@ class EEG(object):
 
             if start_time + int(config.get('general', 'run-time')) <= self.get_timestamp():
                 log.info('Run time reached')
-                self.self.socket.send('STOP', prefix=True)
+                self.socket.send('STOP', prefix=True)
                 return True
 
 
@@ -821,9 +821,6 @@ class EEG(object):
             else:
                 self.socket.send('CHNSET,{0},0'.format(channel), prefix=True)
 
-        # NOTE is not receiving on the c side!!
-        self.socket.send('START')
-        self.get_data()
 
 
     def test_signal(self, socket):
@@ -876,6 +873,11 @@ class EEG(object):
 
         # Commands
         for arg in sys.argv:
+            if "--start" in arg:
+                # NOTE is not receiving on the c side!!
+                self.socket.send('START', prefix=True)
+                self.get_data()
+
             if "--noise-check" in arg:
                 self.noise_check(self.socket)
 

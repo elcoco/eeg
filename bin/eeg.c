@@ -644,6 +644,7 @@ int handleCommands(int socketfd) {
             return 0;
         }
         else if (memcmp(data, "START", 1) == 0 ) {
+            printf("HERE\n");
             sendData(socketfd);
             transfer(OP.STOP);
             return 0;
@@ -661,9 +662,9 @@ int handleCommands(int socketfd) {
             return 0;
         };
 
+    data[0] = '\0';
     };
     return 0;
-    data[0] = '\0';
 };
 
 
