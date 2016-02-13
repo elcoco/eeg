@@ -501,6 +501,7 @@ int msgOutbound(char msg[256]) {;
 
 
 char * get_data(int socketfd, char *msg) {
+    // TODO when connection is broken, we are in the endless loop
     int length;
     // Get data from socket
     if ((recv(socketfd, msg, 3, 0)) > 0) {
@@ -518,7 +519,7 @@ char * get_data(int socketfd, char *msg) {
 
 
 int chnset(int channel, int state) {
-    printf("%d - %d\n", channel, state);
+    //printf("%d - %d\n", channel, state);
     if (state == 1) { 
         if (channel == 1)
             wreg(REG.CH1SET,  0x60);
@@ -560,35 +561,58 @@ int chnset(int channel, int state) {
 
 int handleCommands(int socketfd) {
     int read_size;
-    char data[20];
+    // If garbage output it probably has something to do with string size
+    char * data = malloc(25);
+    //char data[25];
     int running = 0;
 
     while (1) {
         // Clear string
         data[0] = '\0';
 
+        // Block here
         get_data(socketfd, data);
 
         // Change settings
         if (memcmp(data, "CHNSET", 1) == 0 ) {
-            char *opt;
+            char * opt = malloc(25);
             int i = 0;
             int channel;
             int state;
-            printf("data: %s\n", data);
 
             opt = strtok(data, ",");
+
             while (opt != NULL) {
                 i++;
-                printf("%d >> %d\n", i, opt);
-                if (i == 2)
-                    channel = *opt;
-                    printf("channel %d\n", opt);
-                if (i == 3)
-                    state = *opt;
-                    printf("state %d\n", state);
-                    printf("klaar dr mee\n");
+                if (i == 4)
                     break;
+
+                if (i == 2) {
+                    if (memcmp(opt, "1", 1) == 0)
+                        channel = 1;
+                    else if (memcmp(opt, "2", 1) == 0)
+                        channel = 2;
+                    else if (memcmp(opt, "3", 1) == 0)
+                        channel = 3;
+                    else if (memcmp(opt, "4", 1) == 0)
+                        channel = 4;
+                    else if (memcmp(opt, "5", 1) == 0)
+                        channel = 5;
+                    else if (memcmp(opt, "6", 1) == 0)
+                        channel = 6;
+                    else if (memcmp(opt, "7", 1) == 0)
+                        channel = 7;
+                    else if (memcmp(opt, "8", 1) == 0)
+                        channel = 8;
+
+                };
+                if (i == 3) {
+                    if (memcmp(opt, "1", 1) == 0)
+                        state = 1;
+                    else
+                        state = 0;
+                };
+
                 opt = strtok(NULL, ",");
             };
             chnset(channel, state);
@@ -617,13 +641,23 @@ int handleCommands(int socketfd) {
             transfer(OP.STOP);
             return 0;
         }
+        else if (memcmp(data, "START", 1) == 0 ) {
+            sendData(socketfd);
+            transfer(OP.STOP);
+            return 0;
+        }
 
         else {
             msgInbound(data);
         };
 
-        printf("Connection is broken\n");
-        return 0;
+        // Check if connection is broken
+        char c;
+        ssize_t x = recv(socketfd, &c, 1, MSG_PEEK);
+        if (!x > 0) {
+            printf("Client disconnected...\n");
+            return 0;
+        };
 
     };
     return 0;

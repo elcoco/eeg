@@ -734,22 +734,26 @@ class EEG(object):
         plt.ion()
         #self.fig = plt.figure()
         #self.ax1 = self.fig.add_subplot(1,1,1)
-        xar = []
-        yar = []
+        xar = [1,3]
+        yar = [1,3]
+        graph = plt.plot(xar,yar)[0]
 
-        for data in datalist.get_data_list(1):
-            xar.append(data.get_data())
-            yar.append(data.get_timestamp())
-        graph = plt.plot(xar,yar)
-        plt.draw()
+        while True:
+            for data in datalist.get_data_list(1):
+                xar.append(data.get_data())
+                yar.append(data.get_timestamp())
+            graph.set_ydata(yar)
+            plt.draw()
+            plt.pause(0.01)
 
-    def get_data(self, socket):
+
+    def get_data(self):
         # Receive length of data first, then get the full frame 
         start_time = self.get_timestamp()
         while True:
-            length = socket.receive(config.get('general', 'length-size'))
+            length = self.socket.receive(config.get('general', 'length-size'))
             if length:
-                data = socket.receive(length)
+                data = self.socket.receive(length)
                 if data:
                     #log.info('<<< {0}{1}'.format(length,data))
                     if data == "DONE":
@@ -761,7 +765,7 @@ class EEG(object):
 
             if start_time + int(config.get('general', 'run-time')) <= self.get_timestamp():
                 log.info('Run time reached')
-                self.socket.send('STOP', prefix=True)
+                self.self.socket.send('STOP', prefix=True)
                 return True
 
 
@@ -795,32 +799,37 @@ class EEG(object):
     def noise_check(self, socket):
         log.info("Doing noise check")
         socket.send('NOISECHECK', prefix=True)
-        if not self.get_data(socket):
+        if not self.get_data():
             log.error("Failed to get some results")
             return False
         return True
 
 
-    def ch1(self, socket):
-        log.info("Doing noise check")
-        socket.send('CHNSET,1,1', prefix=True)
-        socket.send('CHNSET,2,0', prefix=True)
-        socket.send('CHNSET,3,1', prefix=True)
-        socket.send('CHNSET,4,0', prefix=True)
-        socket.send('CHNSET,5,0', prefix=True)
-        socket.send('CHNSET,6,0', prefix=True)
-        socket.send('CHNSET,7,0', prefix=True)
-        socket.send('CHNSET,8,0', prefix=True)
-        if not self.get_data(socket):
-            log.error("Failed to get some results")
-            return False
-        return True
+
+    def chnset(self, var):
+        channels = var.split('=')
+        if len(channels) == 2:
+            channels = channels[1].split(',')
+
+        for channel in range(1,9):
+            active = False
+            for channel_active in channels:
+                if channel == int(channel_active):
+                    active = True
+            if active:
+                self.socket.send('CHNSET,{0},1'.format(channel), prefix=True)
+            else:
+                self.socket.send('CHNSET,{0},0'.format(channel), prefix=True)
+
+        # NOTE is not receiving on the c side!!
+        self.socket.send('START')
+        self.get_data()
 
 
     def test_signal(self, socket):
         log.info("Starting test signal")
         socket.send('TESTSIGNAL', prefix=True)
-        if not self.get_data(socket):
+        if not self.get_data():
             log.error("Failed to get some results")
             return False
         return True
@@ -862,8 +871,8 @@ class EEG(object):
             elif '--server-port=' in arg:
                 self.change_config_value(arg, 'server', 'port')
 
-        # Create socket
-        self.socket = Socket(config.get('server', 'address'), config.get('server', 'port'))
+            elif '--channels=' in arg:
+                self.chnset(arg)
 
         # Commands
         for arg in sys.argv:
@@ -876,8 +885,6 @@ class EEG(object):
             elif "--shutdown" in arg:
                 self.socket.send('SHUTDOWN', prefix=True)
 
-            elif "--ch1" in arg:
-                self.ch1(self.socket)
 
             if "--plot" in arg:
                 self.plot()
@@ -891,7 +898,10 @@ class EEG(object):
         # Should go in a thread
         #self.setup_plot()
 
-        self.plot() 
+        # Create socket
+        self.socket = Socket(config.get('server', 'address'), config.get('server', 'port'))
+
+        #self.plot() 
         self.handle_arg()
 
         #self.plot()
