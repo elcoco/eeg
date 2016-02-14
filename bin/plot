@@ -6,7 +6,9 @@ try:
     #from matplotlib import style
     import matplotlib.pyplot as plt
     import matplotlib.animation as animation
-    #import matplotlib.dates as dates
+    import matplotlib.dates as mdates
+
+    import subprocess
 
     import inspect
     import re
@@ -187,6 +189,27 @@ class Plot(object):
         return False
 
 
+    def get_last_lines(self, f, n, offset=0):
+        result = []
+        try:
+            child = subprocess.Popen("tail -n {0} {1}".format(n+offset, f), shell=True, stdout=subprocess.PIPE)
+        except:
+            log.error('Failed to execute command')
+            return False
+            
+        child.wait()
+
+        while True:
+            stdout = child.stdout.readline()
+            stdout = stdout.decode()
+            stdout = stdout.strip()
+            if stdout == '' and child.poll() != None:
+                break
+            else:
+                result.append(stdout)
+        return result
+
+
     def sanitize(self, data, extra_opts=[]):
         sanitize_list = [' ', '\n'] + extra_opts
         for sanitize in sanitize_list:
@@ -196,7 +219,13 @@ class Plot(object):
 
     def setup(self):
         self.fig = plt.figure()
+        self.fig.autofmt_xdate()
         self.ax1 = self.fig.add_subplot(1,1,1)
+
+        #self.ax1.fmt_ydata = mdates.DateFormatter('%Y-%m-%d %H:%M:%S.%f')
+
+        #seconds = mdates.SecondLocator()
+        #self.ax1.set_major_locator(seconds)
 
 
     def animate(self, i):
@@ -204,24 +233,23 @@ class Plot(object):
         ys = []
 
         datas = self.get_file()
+        datas = self.get_last_lines('/home/eco/eeg.txt', 100)
         for data in datas:
-            if data[1] == 1:
-                ys.append(data[2])
+            print(data)
+            data = data.split('|')
+            if data[1] == '1':
+                ys.append(int(data[2]))
                 xs.append(data[0])
-        print(xs)
-        print(xs)
-
-
-        for data in datalist.get_data_list():
-            xar.append(data.get_data())
-            yar.append(data.get_timestamp())
+                
+        #self.ax1.format_xdata = mdates.DateFormatter('%Y-%m-%d %H:%M:%S.%f')
         self.ax1.clear()
-        self.ax1.plot(xar,yar)
+        self.ax1.plot(ys)
+        plt.draw()
 
 
     def run(self):
         self.setup()
-        ani = animation.FuncAnimation(self.fig, self.animate, interval=1000)
+        ani = animation.FuncAnimation(self.fig, self.animate, interval=20)
         plt.show()
 
 

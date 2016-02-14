@@ -542,7 +542,7 @@ class Data(object):
         if self.create_file():
             try:
                 FILE = open(config.get('log', 'path'), 'a')
-                FILE.write("{0}, {1}, {2}\n".format(self.get_timestamp(), \
+                FILE.write("{0}|{1}|{2}\n".format(self.get_timestamp(), \
                                                   self.get_channel(), \
                                                   self.get_data()))
                 FILE.close()
