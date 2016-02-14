@@ -4,10 +4,6 @@ try:
     import sys,os
 
     #from matplotlib import style
-    import matplotlib.pyplot as plt
-    import matplotlib.animation as animation
-    import matplotlib.dates as mdates
-
     import subprocess
 
     import inspect
@@ -16,6 +12,7 @@ try:
 except ImportError as e:
     print('failed to import: {0}'.format(e))
     sys.exit()
+
 
 
 class Log(object):
@@ -164,6 +161,7 @@ class Log(object):
 
 
 
+
 class Plot(object):
     def __init__(self):
         pass
@@ -253,11 +251,66 @@ class Plot(object):
         plt.show()
 
 
+
+
 if __name__ == "__main__":
     log = Log()
     log.color('>>>', 'green')
     log.color('<<<', 'blue')
-    app = Plot()
-    app.run()
-#!/usr/bin/python3
+#    app = Plot()
+#    app.run()
+
+log = Log()
+log.color('>>>', 'green')
+log.color('<<<', 'blue')
+
+
+def get_last_lines(f, n, offset=0):
+    result = []
+    try:
+        child = subprocess.Popen("tail -n {0} {1}".format(n+offset, f), shell=True, stdout=subprocess.PIPE)
+    except:
+        log.error('Failed to execute command')
+        return False
+        
+    child.wait()
+
+    while True:
+        stdout = child.stdout.readline()
+        stdout = stdout.decode()
+        stdout = stdout.strip()
+        if stdout == '' and child.poll() != None:
+            break
+        else:
+            result.append(stdout)
+    return result
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+#import matplotlib.animation as animation
+#import matplotlib.dates as mdates
+import time
+
+
+#lines = get_last_lines('/home/eco/eeg.txt', 200)
+
+
+fig,ax = plt.subplots()
+
+tstart = time.time()
+num_plots = 0
+
+while time.time() - tstart < 10:
+    ax.clear()
+    ax.plot(np.random.randn(100))
+    plt.pause(0.001)
+    #plt.draw()
+    num_plots += 1
+
+print(num_plots/10)
+
+
+
+
 

@@ -697,47 +697,6 @@ class EEG(object):
             thread.stop()
 
 
-    def setup_plot(self):
-        plt.title('Data for world domination!')
-        plt.ylabel('Volts')
-        plt.xlabel('Time')
-        plt.gcf().autofmt_xdate()   # Rotates/aligns the labels
-        plt.legend()
-        plt.show()
-
-
-    def animate(self, i):
-        xar = []
-        yar = []
-
-        for data in datalist.get_data_list(1):
-            xar.append(data.get_data())
-            yar.append(data.get_timestamp())
-        self.ax1.clear()
-        self.ax1.plot(xar,yar)
-        plt.draw()
-
-
-    def plot(self):
-        plt.ion()
-        fig, ax = plt.subplots()
-
-        # set seconds
-        seconds = dates.SecondLocator()
-        ax.xaxis.set_major_locator(seconds)
-
-        xar = []
-        yar = []
-
-        while True:
-            for data in datalist.get_data_list(1):
-                xar.append(data.get_data())
-                yar.append(data.get_timestamp())
-            ax.set_ydata(yar)
-            plt.draw()
-            plt.pause(0.01)
-
-
     def get_data(self):
         start_time = self.get_timestamp()
         while True:
@@ -769,19 +728,16 @@ class EEG(object):
         rd = rd.split(',')
 
         channel = 0
-        for index in range(config.get('general', 'length-size'), len(rd)):
+        for index in range(3, len(rd)):
             # TODO find the status bit for loff-n and loff-p
-            #log.info(' '.join(rd))
-            for x in rd:
-                if len(rd) > 9000000 or len(rd) < -9000000:
-                    log.red('High value: {0}'.format(rd))
             channel += 1
-            data = Data()
-            data.set_channel(channel)
-            data.set_data(rd[index])
-            data.write()
-            #data.display()
-            datalist.add_data(data)
+            if config.get('channel'+ str(channel), 'state') == 'on':
+                data = Data()
+                data.set_channel(channel)
+                data.set_data(rd[index])
+                data.write()
+                data.display()
+                datalist.add_data(data)
 
 
     def send_channel_config(self):
