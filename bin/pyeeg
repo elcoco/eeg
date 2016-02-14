@@ -503,7 +503,6 @@ class Config(object):
 class Data(object):
     def __init__(self):
         # TODO: create a method to create a filename with date_increasing number
-        self.write_path = '/home/eco/usb/data.txt'
         self.channel = False
         self.data = False
         self.loff_p = True
@@ -526,10 +525,10 @@ class Data(object):
     def create_file(self):
         """ Create a file if it doesn't exist """
         try:
-            with open(self.write_path) as f: pass
+            with open(config.get('log', 'path')) as f: pass
         except IOError as e:
             try:
-                FILE = open(self.write_path, 'w')
+                FILE = open(config.get('log', 'path'), 'w')
                 FILE.close()
             except IOError as e:
                 log.error('WARNING ... Couldn\'t create file \'%s\''%self.write_path)
