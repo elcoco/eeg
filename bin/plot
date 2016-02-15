@@ -286,36 +286,74 @@ def get_last_lines(f, n, offset=0):
     return result
 
 
+import matplotlib
+#matplotlib.use('Qt5Agg')
 import numpy as np
 import matplotlib.pyplot as plt
-#import matplotlib.animation as animation
-#import matplotlib.dates as mdates
 import time
 
 
-#lines = get_last_lines('/home/eco/eeg.txt', 200)
+length = 60
+plot_length = 50
 
+# fig is outer box
+# axes is plotting area containing all the elements
+# axis is the actual axis in the graph (ticks (locator object), formatted by a Formatter
+# artists is almost everything that you can see like titles,figure legends, lines text etc.
 
 fig,ax = plt.subplots()
-line, = ax.plot(np.random.randn(100))
+line1, = ax.plot(np.random.randn(plot_length))
+line2, = ax.plot(np.random.randn(plot_length)+5)
+#line3, = ax.plot(np.random.randn(plot_length)+10)
+#line4, = ax.plot(np.random.randn(plot_length)+15)
+#line5, = ax.plot(np.random.randn(plot_length)+20)
 
+
+#ax.set_xlabel('Time')
+#ax.set_ylabel('Volts')
+#ax.set_title('Graphs for world domination')
+
+#plt.legend()
+#plt.xlim([0,1000])
 plt.ion()
+
+plt.title('Graphs for world domination')
+plt.xlabel('Time')
+plt.ylabel('Volts')
+plt.grid(True)
+
 plt.show()
+
 fig.canvas.draw()
+
+
 
 tstart = time.time()
 num_plots = 0
 
-while time.time() - tstart < 10:
-    line.set_ydata(np.random.randn(100))
+while time.time() - tstart < length:
+    line1.set_ydata(np.random.randn(plot_length))
+#    line2.set_ydata(np.random.randn(plot_length) +5)
+#    line3.set_ydata(np.random.randn(plot_length) +10)
+#    line4.set_ydata(np.random.randn(plot_length) +15)
+#    line5.set_ydata(np.random.randn(plot_length) +20)
+
     ax.draw_artist(ax.patch)
-    ax.draw_artist(line)
+
+    ax.draw_artist(line1)
+#    ax.draw_artist(line2)
+#    ax.draw_artist(line3)
+#    ax.draw_artist(line4)
+#    ax.draw_artist(line5)
+
     fig.canvas.update()
-    #fig.canvas.draw()
+#    fig.canvas.draw()
+#    plt.draw()
     fig.canvas.flush_events()
+    #plt.show()
     num_plots += 1
 
-print(num_plots/10)
+print(num_plots/length)
 
 
 
