@@ -13,22 +13,30 @@ win.setWindowTitle('EEG')
 
 plots = []
 curves = []
+datas = []
+d_size = 1000
+n_plots = 10
 
-data1 = np.random.normal(size=300)
+data1 = np.random.normal(size=d_size)
 
-for i in range(1,9):
+for i in range(1,n_plots + 1):
+    d = np.random.normal(size=d_size)
     p = win.addPlot(row=i,col=1)
-    curve = p.plot(data1, pen=i)
+    c= p.plot(data1, pen=i)
+
     plots.append(p)
-    curves.append(curve)
+    curves.append(c)
+    datas.append(d)
 
 
 def update_ch1():
-    global plots, curves, data1, curve1
-    data1[:-1] = data1[1:]
-    data1[-1] = np.random.normal()
+    global plots, curves, datas
+    i = 0
     for curve in curves:
-        curve.setData(data1)
+        datas[i][:-1] = datas[i][1:]
+        datas[i][-1] = np.random.normal()
+        curve.setData(datas[i])
+        i += 1
 
 
 

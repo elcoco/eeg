@@ -3,10 +3,13 @@
 try:
     import sys,os
 
-    from matplotlib import style
-    import matplotlib.pyplot as plt
-    import matplotlib.animation as animation
-    import matplotlib.dates as dates
+#    from matplotlib import style
+#    import matplotlib.pyplot as plt
+#    import matplotlib.animation as animation
+#    import matplotlib.dates as dates
+    import pyqtgraph as pg
+    from pyqtgraph.Qt import QtCore, QtGui
+    import numpy as np
 
 
     import threading
@@ -559,10 +562,30 @@ class Data(object):
 class DataList(object):
     def __init__(self):
         self.data = []
+        self.last_item = []
 
 
-    def get_timestamp_list(self): return self.data
     def add_data(self, data): self.data.append(data)
+
+
+    def get_last_items(self, channel, last_item=False, amount=False):
+        # Get the newest items since the last_item object
+        if not last_item: last_item = self.last_item
+
+        return_list = []
+        data_list = self.get_data_list(channel)
+
+        for i in range(len(data_list), 0):
+            print(i)
+            self.last_item = data_list[i]
+
+            if data_list[i] == last_item:
+                return return_list
+
+            return_list.append(data_list[1])
+
+        log.error('Could not find last_item: {0}'.format(last_item))
+        return False
 
 
     def get_data_list(self, channel):
@@ -571,15 +594,6 @@ class DataList(object):
             if int(data.get_channel()) == int(channel):
                 return_list.append(data)
         return return_list
-
-
-    def get_timestamp_list(self, channel):
-        return_list = []
-        for data in self.data:
-            if int(data.get_channel()) == int(channel):
-                return_list.append(data.get_timestamp())
-        return return_list
-
 
 
 class Socket(object):
@@ -669,6 +683,86 @@ class PlotThread(StoppableThread):
 
 
 
+class QtThread(StoppableThread):
+
+    def __init__(self):
+        StoppableThread.__init__(self)
+
+
+    def setup(self):
+        # Must be set before creating any widgets
+        pg.setConfigOption('background', 0.1)
+
+        # Create a grid with multiple items
+        self.win = pg.GraphicsWindow()
+        self.win.setWindowTitle('EEG')
+
+        self.plots = []
+        self.curves = []
+        self.datas = []
+        self.states = {}
+
+        bar_size = 1000
+        self.n_plots = 8
+
+        for i in range(1, self.n_plots+1):
+            p = self.win.addPlot(row=i,col=1)
+            p.setRange(xRange=[-bar_size, 0])
+            p.setLimits(xMax=0)
+            p.setClipToView(True)
+            p.setDownsampling(mode='peak')
+
+            curve = p.plot(pen=i)
+            data = np.empty(bar_size)
+
+            self.plots.append(p)
+            self.curves.append(curve)
+            self.datas.append(data)
+            self.states[i] = 0
+
+
+    def update_channel(self, channel, data, last_state):
+        channel = channel-1
+        self.datas[channel][last_state] = data
+        last_state += 1
+
+        if last_state >= self.datas[channel].shape[0]:
+            tmp = self.datas[channel]
+
+            # Double buffer
+            self.datas[channel] = np.empty(self.datas[channel].shape[0] * 2)
+            self.datas[channel][:tmp.shape[0]] = tmp
+
+        self.curves[channel].setData(self.datas[channel][:last_state])
+        self.curves[channel].setPos(-last_state, 0)
+        return last_state
+
+
+    def update(self):
+        for channel in range(1, self.n_plots+1):
+            data = datalist.get_last_items(channel)
+            self.states[channel] = self.update_channel(channel, np.random.normal(), self.states[channel])
+
+
+    def run(self):
+        self.setup()
+
+        timer = pg.QtCore.QTimer()
+        timer.timeout.connect(self.update)
+        timer.start(50)
+
+        QtGui.QApplication.instance().exec_()
+
+
+
+
+
+
+
+
+
+
+
 class EEG(object):
     def get_file(self, filename):
         """ Get contents of a file and put every line in a list"""
@@ -691,7 +785,7 @@ class EEG(object):
 
     def start_threads(self):
         self.running_threads = []
-        self.running_threads.append(PlotThread().start())
+        self.running_threads.append(QtThread().start())
 
 
     def stop_threads(self):
@@ -810,11 +904,10 @@ class EEG(object):
                     self.set_channel_config(value)
 
 
-
         # Commands
         for arg in sys.argv:
             if "--plot" in arg:
-                self.plot()
+                self.start_threads()
 
             if "--start" in arg:
                 # NOTE is not receiving on the c side!!
@@ -850,6 +943,13 @@ class EEG(object):
         self.handle_arg()
 
         # NOTE Live updating plot
+
+""" 
+Create a method get_last_n(last_item, amount)
+retrieve the newest entries since last_item
+
+thread for qt app checkt get_last_n() for new entries
+""" 
 
 
 
