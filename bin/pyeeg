@@ -562,7 +562,6 @@ class Data(object):
 class DataList(object):
     def __init__(self):
         self.data = []
-        self.last_item = []
 
 
     def add_data(self, data): self.data.append(data)
@@ -570,19 +569,25 @@ class DataList(object):
 
     def get_last_items(self, channel, last_item=False, amount=False):
         # Get the newest items since the last_item object
-        if not last_item: last_item = self.last_item
+        
+        # Make a copy to work with, there could occur changes while running this method
+        data_list = self.get_data_list(channel)[:]
 
-        return_list = []
-        data_list = self.get_data_list(channel)
+        if not last_item:
+            return data_list
 
-        for i in range(len(data_list), 0):
-            print(i)
+        return_list_data = []
+
+        print(len(data_list), len(self.data))
+
+        for i in range(len(data_list)+1, 0):
             self.last_item = data_list[i]
 
             if data_list[i] == last_item:
                 return return_list
 
-            return_list.append(data_list[1])
+            #return_list.append(data_list[i])
+            return_list_data.append(data_list[i].get_data())
 
         log.error('Could not find last_item: {0}'.format(last_item))
         return False
@@ -590,9 +595,11 @@ class DataList(object):
 
     def get_data_list(self, channel):
         return_list = []
-        for data in self.data:
+        data_tmp = self.data[:]
+        for data in data_tmp:
             if int(data.get_channel()) == int(channel):
                 return_list.append(data)
+
         return return_list
 
 
@@ -702,7 +709,9 @@ class QtThread(StoppableThread):
         self.datas = []
         self.states = {}
 
-        bar_size = 1000
+        self.last_items = {}
+
+        bar_size = 100
         self.n_plots = 8
 
         for i in range(1, self.n_plots+1):
@@ -740,8 +749,23 @@ class QtThread(StoppableThread):
 
     def update(self):
         for channel in range(1, self.n_plots+1):
-            data = datalist.get_last_items(channel)
-            self.states[channel] = self.update_channel(channel, np.random.normal(), self.states[channel])
+            if config.get('channel' + str(channel), 'state') == 'on':
+
+                # Set default values for last_items
+                if channel not in self.last_items.items():
+                    self.last_items[channel] = False
+
+                # Retrieve list of objects newer than last_item
+                datas = datalist.get_last_items(channel, self.last_items[channel])
+                if datas:
+                    self.last_items[channel] = datas[-1]
+                    plot_list_data = []
+                    for data in datas:
+                        #plot_list_data.append(int(data.get_data()))
+                        self.states[channel] = self.update_channel(channel, data.get_data(), self.states[channel])
+                    #log.info(plot_list_data)
+
+                    #self.states[channel] = self.update_channel(channel, plot_list_data, self.states[channel])
 
 
     def run(self):
@@ -749,7 +773,7 @@ class QtThread(StoppableThread):
 
         timer = pg.QtCore.QTimer()
         timer.timeout.connect(self.update)
-        timer.start(50)
+        timer.start(1000)
 
         QtGui.QApplication.instance().exec_()
 
@@ -831,7 +855,7 @@ class EEG(object):
                 data = Data()
                 data.set_channel(channel)
                 data.set_data(rd[index])
-                data.write()
+                #data.write()
                 data.display()
                 datalist.add_data(data)
 
