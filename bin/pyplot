@@ -1,0 +1,40 @@
+#!/usr/bin/python3
+import pyqtgraph as pg
+from pyqtgraph.Qt import QtCore, QtGui
+import numpy as np
+
+# Must be set before creating any widgets
+pg.setConfigOption('background', 0.1)
+
+# Create a grid with multiple items
+win = pg.GraphicsWindow()
+win.setWindowTitle('EEG')
+
+
+plots = []
+curves = []
+
+data1 = np.random.normal(size=300)
+
+for i in range(1,9):
+    p = win.addPlot(row=i,col=1)
+    curve = p.plot(data1, pen=i)
+    plots.append(p)
+    curves.append(curve)
+
+
+def update_ch1():
+    global plots, curves, data1, curve1
+    data1[:-1] = data1[1:]
+    data1[-1] = np.random.normal()
+    for curve in curves:
+        curve.setData(data1)
+
+
+
+timer = pg.QtCore.QTimer()
+timer.timeout.connect(update_ch1)
+timer.start(50)
+
+QtGui.QApplication.instance().exec_()
+
