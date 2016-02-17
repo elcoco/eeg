@@ -912,8 +912,10 @@ class EEG(object):
             length = self.socket.receive(config.get('general', 'length-size'))
             if length:
                 # then get the full frame 
-                self.add_data(self.socket.receive(length))
-                total_frames += 1
+                data = self.socket.receive(length)
+                if data:
+                    self.add_data(self.socket.receive(length))
+                    total_frames += 1
             else:
                 log.error('Error getting data')
                 return False
