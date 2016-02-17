@@ -350,10 +350,8 @@ int startSPI() {
     bcm2835_spi_begin();                                        // Open SPI
     bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);    // Fill with trailing zero's
     bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0,0);       // CS LOW when transfer
-    //bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_16);  // 15.625 mhz
-    //bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_65536);  // 3.8 khz
     bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_256);  // 1 mhz
-    //bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_2048);  // 122.x khz
+    //bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_64);  // 3.9 mhz
     //bcm2835_spi_setDataMode(BCM2835_SPI_MODE0); // Clock idle low, data is clocked in on rising edge, ouput data (change) on falling edge
     bcm2835_spi_setDataMode(BCM2835_SPI_MODE1); // Clock idle low, data is clocked in on rising edge, ouput data (change) on falling edge
     //bcm2835_spi_chipSelect(BCM2835_SPI_CS0);                    // Use first CS (RPI2 has two CS)
@@ -453,6 +451,7 @@ int sendData(int socketfd) {
     int status;
     char command[256];
     char data[20];
+    int frame_counter = 0;
 
     // Clear string
     data[0] = '\0';
@@ -481,12 +480,15 @@ int sendData(int socketfd) {
             setBlocking(socketfd, 1);
             return 1;
         };
+
+        frame_counter ++;
             
         get_data(socketfd, data);
         if (memcmp(data, "STOP", 4) == 0) {
             //Make socket blocking again
             printf("Send Stop\n");
             setBlocking(socketfd, 1);
+            printf("Total frames: %d\n", frame_counter);
             return 0;
         };
     };
