@@ -710,7 +710,7 @@ class QtThread(StoppableThread):
 
         self.last_frames = {}   # last_frames is the  dict that stores the last fetched frame by channel
 
-        bar_size = 400
+        bar_size = 1000
         self.n_plots = 8
 
         # Setup plots and curves fill their contents with empty numpy arrays
