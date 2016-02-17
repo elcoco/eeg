@@ -702,17 +702,19 @@ class QtThread(StoppableThread):
         self.win = pg.GraphicsWindow()
         self.win.setWindowTitle('EEG')
 
+        # Vars to keep track of frames and location of frames
         self.plots = []
         self.curves = []
-        self.datas = []
-        self.states = {}
+        self.data_buffers = []         # Stores numpy data arrays containing the full data list
+        self.framecount = {}        # Stores the number of frames so we can check if it fits in the buffer
 
-        self.last_items = {}
+        self.last_frames = {}   # last_frames is the  dict that stores the last fetched frame by channel
 
-        bar_size = 100
+        bar_size = 400
         self.n_plots = 8
 
-        for i in range(1, self.n_plots+1):
+        # Setup plots and curves fill their contents with empty numpy arrays
+        for i in range(0, self.n_plots):
             p = self.win.addPlot(row=i,col=1)
             p.setRange(xRange=[-bar_size, 0])
             p.setLimits(xMax=0)
@@ -724,16 +726,34 @@ class QtThread(StoppableThread):
 
             self.plots.append(p)
             self.curves.append(curve)
-            self.datas.append(data)
-            self.states[i] = 0
+            self.data_buffers.append(data)
+            self.framecount[i] = 0
 
 
-    def update_channel(self, channel, data, last_state):
+    def update_channel_bak(self, channel, data, last_state, current_state):
+        # TODO: try to understand this piece of code and solve the problem 
+
+        """
+        if last list + new data >= buffer size
+            backup the last list + new data
+            create new buffer which is bigger
+            copy old list back to new buffer
+        """
+
+        # lists start with zero
         channel = channel-1
-        self.datas[channel][last_state] = data[-1]
-        last_state += 1
 
+        # Find 
+        #self.datas[channel][last_state] = data
+        log.info('last_state: {0} '.format(last_state))
+        log.info('cur_state: {0} '.format(current_state))
+        log.info('>>> {0}'.format(self.datas[channel].shape))
+
+        # shape returns the rows,columns of the matrix, so shape[0] returns rows
+
+        # If last buffer size is bigger than b
         if last_state >= self.datas[channel].shape[0]:
+
             # If we grow out of the buffer -> copy buffer to tmp
             tmp = self.datas[channel]
 
@@ -748,24 +768,75 @@ class QtThread(StoppableThread):
         return last_state
 
 
+    def update_channel(self, channel, new_frames):
+
+        """
+        Create empty buffer as large as ROI (region of interest)
+        count = count the frames that we collect
+
+        if countofframes + new frames >= buffer size
+            backup the last list + new data
+            create new buffer which is bigger
+            copy old list back to new buffer
+        """
+
+        # lists start with zero
+        channel = channel - 1
+
+        # Short names are good!
+        framecount = self.framecount[channel]
+        data_buffer = self.data_buffers[channel]
+        curve = self.curves[channel]
+
+        
+        # Combine the old buffer and the new data
+        data_buffer = np.append(data_buffer, new_frames)
+
+        # update the framecount with the new data (numpy array length is fetched with data.shape[0]
+        framecount += new_frames.shape[0]
+
+        # If the length of data is bigger than the buffer, we have to enlarge the buffer
+        if framecount >= data_buffer.shape[0]:
+            log.info('>>> we have to enlarge buffer: {0} >= {1}'.format(framecount, data_buffer.shape[0]))
+
+            # Backup old bufer
+            tmp = data_buffer
+            
+            # Create new buffer, double the size of the old one
+            data_buffer = np.empty(data_buffer.shape[0] * 2)
+            log.info('>>> new buffer size: {0}'.format(data_buffer.shape[0]))
+
+            # Copy the buffer back to the first half of the new, bigger buffer
+            data_buffer[:tmp.shape[0]] = tmp
+
+        # Update pyqtgraph with the first half (new) of the buffer
+        curve.setData(data_buffer[:framecount])
+        curve.setPos(-framecount, 0)
+
+        self.framecount[channel] = framecount
+        self.data_buffers[channel] = data_buffer
+        self.curves[channel] = curve
+
+
     def update(self):
         for channel in range(1, self.n_plots+1):
             if config.get('channel' + str(channel), 'state') == 'on':
 
                 # Set default values for last_items
-                if channel not in self.last_items.keys():
-                    self.last_items[channel] = False
+                # last_frames is the  dict that stores the last fetched frame by channel
+                if channel not in self.last_frames.keys():
+                    self.last_frames[channel] = False
 
-                # Retrieve list of objects newer than last_item
-                datas = datalist.get_last_items(channel, self.last_items[channel])
+                # Retrieve list of objects newer than last_item (which is the Data() object that was last)
+                datas = datalist.get_last_items(channel, self.last_frames[channel])
+
                 if datas:
-
                     # remove first lot of frames if it is the first go, this should be changed obviously
-                    if not self.last_items[channel]:
+                    if not self.last_frames[channel]:
                         datas = datas[-1:]
 
-                    # Set last received frame in self.last_items
-                    self.last_items[channel] = datas[-1]
+                    # Set last received frame in self.last_frames
+                    self.last_frames[channel] = datas[-1]
 
                     log.info('>>> channel: {0}'.format(channel))
                     log.info('>>> frames: {0}'.format(str(len(datas))))
@@ -775,13 +846,12 @@ class QtThread(StoppableThread):
                     for data in datas:
                         data_chunk.append(int(data.get_data()))
 
-                    np_chunk = np.array(data_chunk)
-                    self.states[channel] = self.update_channel(channel, np_chunk, self.states[channel])
 
+                    # Update the graph with the new data, provide -> channel, chunk of data, last state, current state
+                    self.update_channel( channel, np.array(data_chunk))
 
-                    ##log.info(plot_list_data)
-
-                    ##self.states[channel] = self.update_channel(channel, plot_list_data, self.states[channel])
+                    # Save current state as last state
+                    #self.last_indecis[channel] = len(datas)
 
 
     def run(self):
