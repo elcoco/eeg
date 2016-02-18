@@ -706,7 +706,7 @@ class QtThread(StoppableThread):
 
         # Create a grid with multiple items
         self.win = pg.GraphicsWindow()
-        #self.win.setWindowTitle('EEG')
+        self.win.setWindowTitle('EEG')
 
         # Vars to keep track of frames and location of frames
         self.plots = []
@@ -808,8 +808,6 @@ class QtThread(StoppableThread):
                 # Retrieve list of objects newer than last_item (which is the Data() object that was last)
                 datas = datalist.get_last_items(channel, self.last_frames[channel])
 
-
-
                 if datas:
                     # For FPS calculation
                     self.total_framecount += len(datas)
@@ -834,7 +832,7 @@ class QtThread(StoppableThread):
         if self.start_time:
             self.total_fps = self.total_framecount / (self.get_timestamp() - self.start_time).total_seconds()
         self.start_time = self.get_timestamp()
-        self.win.setWindowTitle('FPS {0}'.format(self.total_fps))
+        self.plots[0].setTitle('FPS {0}'.format(self.total_fps))
         self.running = False
 
 
