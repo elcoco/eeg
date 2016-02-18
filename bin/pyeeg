@@ -602,6 +602,7 @@ class DataList(object):
         return return_list
 
 
+
 class Socket(object):
     def __init__(self, host, port):
         try:
@@ -690,14 +691,12 @@ class PlotThread(StoppableThread):
 
 
 class QtThread(StoppableThread):
-
     def __init__(self):
         StoppableThread.__init__(self)
 
 
     def get_timestamp(self):
         return datetime.datetime.today()
-
 
 
     def setup(self):
@@ -715,9 +714,13 @@ class QtThread(StoppableThread):
         self.framecount = {}          # Stores the number of frames so we can check if it fits in the buffer
         self.total_framecount = 0     # Stores the total number of frames for all channels combined to calculate FPS
         self.last_frames = {}         # last_frames is the  dict that stores the last fetched frame by channel
-        self.start_time = False       # For FPS calculation
         self.running = False          # Make sure only one verion of update() is running
-        self.total_fps = 0              # Keep track of FPS
+
+        self.fps = False            # Keep track of FPS
+        self.fps_frames_count = 0
+        self.fps_t_interval = 1             # The timespan over which the FPS is calculated in seconds
+        self.fps_t_start = False
+        self.fps_t_end = False
 
         bar_size = 1000
         self.n_plots = 8
@@ -737,8 +740,6 @@ class QtThread(StoppableThread):
             self.curves.append(curve)
             self.data_buffers.append(data)
             self.framecount[i] = 0
-
-
 
 
     def update_channel(self, channel, new_frames):
@@ -819,8 +820,6 @@ class QtThread(StoppableThread):
                     # Set last received frame in self.last_frames
                     self.last_frames[channel] = datas[-1]
 
-                    log.info('>>> {0}: {1} Frames'.format(channel, str(len(datas))))
-
                     data_chunk = []
                     for data in datas:
                         data_chunk.append(int(data.get_data()))
@@ -828,12 +827,33 @@ class QtThread(StoppableThread):
                     # Update the graph with the new data, provide -> channel, chunk of data, last state, current state
                     self.update_channel( channel, np.array(data_chunk))
 
-        # Calculate total FPS
-        if self.start_time:
-            self.total_fps = self.total_framecount / (self.get_timestamp() - self.start_time).total_seconds()
-        self.start_time = self.get_timestamp()
-        self.plots[0].setTitle('FPS {0}'.format(self.total_fps))
+        if self.calculate_fps(self.total_framecount):
+            self.plots[0].setTitle('FPS {0}'.format(self.fps))
         self.running = False
+
+
+    def calculate_fps(self, n_frames):
+        # Stores frames and time elapsed and updates when t_update has passed
+        # Return False when there is no new data available
+
+        if not self.fps_t_start:
+            self.fps_t_start = self.get_timestamp()
+
+        t_current = self.get_timestamp()
+        t_elapsed = (t_current - self.fps_t_start).total_seconds()
+
+        if t_elapsed <= self.fps_t_interval:
+            # update time not reached yet
+            self.fps_frames_count += n_frames
+            return False
+        else:
+            # update time has been reached --> change self.fps
+            self.fps = self.fps_frames_count / t_elapsed
+
+            # Reset variables
+            self.fps_t_start = self.get_timestamp()
+            self.fps_frames_count = 0
+            return self.fps
 
 
     def run(self):
@@ -841,17 +861,9 @@ class QtThread(StoppableThread):
 
         timer = pg.QtCore.QTimer()
         timer.timeout.connect(self.update)
-        timer.start(200)
+        timer.start(10)
 
         QtGui.QApplication.instance().exec_()
-
-
-
-
-
-
-
-
 
 
 
