@@ -17,6 +17,7 @@ try:
     import datetime
     import socket
     import select
+    import time
 
     import inspect
     import re
@@ -694,21 +695,29 @@ class QtThread(StoppableThread):
         StoppableThread.__init__(self)
 
 
+    def get_timestamp(self):
+        return datetime.datetime.today()
+
+
+
     def setup(self):
         # Must be set before creating any widgets
         pg.setConfigOption('background', 0.1)
 
         # Create a grid with multiple items
         self.win = pg.GraphicsWindow()
-        self.win.setWindowTitle('EEG')
+        #self.win.setWindowTitle('EEG')
 
         # Vars to keep track of frames and location of frames
         self.plots = []
         self.curves = []
-        self.data_buffers = []         # Stores numpy data arrays containing the full data list
-        self.framecount = {}        # Stores the number of frames so we can check if it fits in the buffer
-
-        self.last_frames = {}   # last_frames is the  dict that stores the last fetched frame by channel
+        self.data_buffers = []        # Stores numpy data arrays containing the full data list
+        self.framecount = {}          # Stores the number of frames so we can check if it fits in the buffer
+        self.total_framecount = 0     # Stores the total number of frames for all channels combined to calculate FPS
+        self.last_frames = {}         # last_frames is the  dict that stores the last fetched frame by channel
+        self.start_time = False       # For FPS calculation
+        self.running = False          # Make sure only one verion of update() is running
+        self.total_fps = 0              # Keep track of FPS
 
         bar_size = 1000
         self.n_plots = 8
@@ -730,46 +739,9 @@ class QtThread(StoppableThread):
             self.framecount[i] = 0
 
 
-    def update_channel_bak(self, channel, data, last_state, current_state):
-        # TODO: try to understand this piece of code and solve the problem 
-
-        """
-        if last list + new data >= buffer size
-            backup the last list + new data
-            create new buffer which is bigger
-            copy old list back to new buffer
-        """
-
-        # lists start with zero
-        channel = channel-1
-
-        # Find 
-        #self.datas[channel][last_state] = data
-        log.info('last_state: {0} '.format(last_state))
-        log.info('cur_state: {0} '.format(current_state))
-        log.info('>>> {0}'.format(self.datas[channel].shape))
-
-        # shape returns the rows,columns of the matrix, so shape[0] returns rows
-
-        # If last buffer size is bigger than b
-        if last_state >= self.datas[channel].shape[0]:
-
-            # If we grow out of the buffer -> copy buffer to tmp
-            tmp = self.datas[channel]
-
-            # Double buffer
-            self.datas[channel] = np.empty(self.datas[channel].shape[0] * 2)
-
-            # Copy the buffer back to the new, bigger buffer
-            self.datas[channel][:tmp.shape[0]] = tmp
-
-        self.curves[channel].setData(self.datas[channel][:last_state])
-        self.curves[channel].setPos(-last_state, 0)
-        return last_state
 
 
     def update_channel(self, channel, new_frames):
-
         """
         Create empty buffer as large as ROI (region of interest)
         count = count the frames that we collect
@@ -788,7 +760,6 @@ class QtThread(StoppableThread):
         data_buffer = self.data_buffers[channel]
         curve = self.curves[channel]
 
-        
         # Combine the old buffer and the new data
         data_buffer = np.append(data_buffer, new_frames)
 
@@ -804,7 +775,6 @@ class QtThread(StoppableThread):
             
             # Create new buffer, double the size of the old one
             data_buffer = np.empty(data_buffer.shape[0] * 2)
-            log.info('>>> new buffer size: {0}'.format(data_buffer.shape[0]))
 
             # Copy the buffer back to the first half of the new, bigger buffer
             data_buffer[:tmp.shape[0]] = tmp
@@ -812,13 +782,21 @@ class QtThread(StoppableThread):
         # Update pyqtgraph with the first half (new) of the buffer
         curve.setData(data_buffer[:framecount])
         curve.setPos(-framecount, 0)
+        #self.plots[channel].setTitle('Channel {0} - FPS {1}'.format(channel, self.total_fps))
 
         self.framecount[channel] = framecount
         self.data_buffers[channel] = data_buffer
         self.curves[channel] = curve
+        #self.total_framecount += framecount
 
 
     def update(self):
+        # Make sure only one version of this method is running
+        if self.running: return
+        self.running = True
+
+        self.total_framecount = 0
+
         for channel in range(1, self.n_plots+1):
             if config.get('channel' + str(channel), 'state') == 'on':
 
@@ -830,7 +808,12 @@ class QtThread(StoppableThread):
                 # Retrieve list of objects newer than last_item (which is the Data() object that was last)
                 datas = datalist.get_last_items(channel, self.last_frames[channel])
 
+
+
                 if datas:
+                    # For FPS calculation
+                    self.total_framecount += len(datas)
+
                     # remove first lot of frames if it is the first go, this should be changed obviously
                     if not self.last_frames[channel]:
                         datas = datas[-1:]
@@ -838,20 +821,21 @@ class QtThread(StoppableThread):
                     # Set last received frame in self.last_frames
                     self.last_frames[channel] = datas[-1]
 
-                    log.info('>>> channel: {0}'.format(channel))
-                    log.info('>>> frames: {0}'.format(str(len(datas))))
-                    # TODO it is giving all items in datalist instead of only the newest ones
+                    log.info('>>> {0}: {1} Frames'.format(channel, str(len(datas))))
 
                     data_chunk = []
                     for data in datas:
                         data_chunk.append(int(data.get_data()))
 
-
                     # Update the graph with the new data, provide -> channel, chunk of data, last state, current state
                     self.update_channel( channel, np.array(data_chunk))
 
-                    # Save current state as last state
-                    #self.last_indecis[channel] = len(datas)
+        # Calculate total FPS
+        if self.start_time:
+            self.total_fps = self.total_framecount / (self.get_timestamp() - self.start_time).total_seconds()
+        self.start_time = self.get_timestamp()
+        self.win.setWindowTitle('FPS {0}'.format(self.total_fps))
+        self.running = False
 
 
     def run(self):
@@ -859,7 +843,7 @@ class QtThread(StoppableThread):
 
         timer = pg.QtCore.QTimer()
         timer.timeout.connect(self.update)
-        timer.start(50)
+        timer.start(200)
 
         QtGui.QApplication.instance().exec_()
 
@@ -1080,5 +1064,8 @@ if __name__ == "__main__":
     log = Log()
     log.color('>>>', 'green')
     log.color('<<<', 'blue')
+    log.color('###', 'red')
+    log.color('---', 'blue')
+
     app = EEG()
     app.run()
