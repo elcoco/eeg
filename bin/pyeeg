@@ -713,17 +713,16 @@ class QtThread(StoppableThread):
         self.fbs_y = []                     # Stores numpy data arrays (buffers) containing the full data buffer
         self.fbs_x = []                     # Stores numpy data arrays (buffers) containing the full data buffer
         self.framecount = [0,0,0,0,0,0,0,0] # Stores the number of frames for every channel so we can check if it fits in the buffer
-        self.total_framecount = 0           # Stores the total number of frames for all channels combined to calculate FPS
         self.last_frames = {}               # last_frames is the  dict that stores the last fetched frame by channel
         self.running = False                # Make sure only one verion of update() is running
 
-        self.fps = False                # Keep track of FPS
-        self.fps_frames_count = 0
+        self.fps = [False,False,False,False,False,False,False,False]        # Keep track of FPS
+        self.fps_frames_count = [0,0,0,0,0,0,0,0]
         self.fps_t_interval = 1         # The timespan over which the FPS is calculated in seconds
-        self.fps_t_start = False
-        self.fps_t_end = False
+        self.fps_t_start = [False,False,False,False,False,False,False,False]
+        self.fps_t_end = [False,False,False,False,False,False,False,False]
 
-        buffer_size = 1000              # Initial buffer size
+        buffer_size = 100              # Initial buffer size
         self.n_plots = 8                # Number of plots(channels)
 
         # Setup plots and curves fill their contents with empty numpy arrays
@@ -736,7 +735,8 @@ class QtThread(StoppableThread):
             p.showGrid(x=True, y=True)
 
             curve = p.plot(pen=i)
-            data = np.empty(buffer_size)
+            #data = np.empty(buffer_size)
+            data = np.empty(1)
 
             self.plots.append(p)
             self.curves.append(curve)
@@ -774,7 +774,8 @@ class QtThread(StoppableThread):
         framecount += ys.shape[0]
 
         # If the length of data is bigger than the buffer, we have to enlarge the buffer
-        if framecount >= fb_y.shape[0]:
+        #log.info('>>> Framecount: {0}, len fb_y {1}'.format(framecount, fb_y.shape[0]))
+        if int(framecount) >= int(fb_y.shape[0]):
             log.info('>>> we have to enlarge buffer: {0} >= {1}'.format(framecount, fb_y.shape[0]))
 
             # Backup old bufer
@@ -782,8 +783,8 @@ class QtThread(StoppableThread):
             tmp_x = fb_x[:]
             
             # Create new buffer, double the size of the old one
-            fb_y = np.empty(fb_y.shape[0] * 2)
-            fb_x = np.empty(fb_x.shape[0] * 2)
+            fb_y = np.empty(fb_y.shape[0] + fb_y.shape(0) + 10)
+            fb_x = np.empty(fb_x.shape[0] + fb_x.shape(0) + 10)
 
             # Copy the buffer back to the first half of the new, bigger buffer
             fb_y[:tmp_y.shape[0]] = tmp_y
@@ -793,8 +794,12 @@ class QtThread(StoppableThread):
         #curve.setData(fb_y[:framecount], fb_x[:framecount])
         curve.setData(fb_y[:framecount])
         curve.setPos(-framecount, 0)
-        #self.plots[channel].setTitle('Channel {0} - FPS {1}'.format(channel, self.total_fps))
 
+        fps = self.calculate_fps(channel, len(ys))
+        if fps:
+            self.plots[channel].setTitle('Channel {0} - FPS {1:.0f}'.format(channel, self.fps[channel]))
+
+        # TODO limit displayed channels to configured channels
         self.framecount[channel] = framecount
         # Move buffers back to globals
         self.fbs_y[channel] = fb_y[:]
@@ -806,8 +811,6 @@ class QtThread(StoppableThread):
         # Make sure only one version of this method is running
         if self.running: return
         self.running = True
-
-        self.total_framecount = 0
 
         for channel in range(1, 9):
             if config.get('channel' + str(channel), 'state') == 'on':
@@ -821,9 +824,6 @@ class QtThread(StoppableThread):
                 datas = datalist.get_last_items(channel, self.last_frames[channel])
 
                 if datas:
-                    # For FPS calculation
-                    self.total_framecount += len(datas)
-
                     # remove first lot of frames if it is the first go, this should be changed obviously
                     if not self.last_frames[channel]:
                         datas = datas[-1:]
@@ -841,33 +841,36 @@ class QtThread(StoppableThread):
                     # Update the graph with the new data, provide -> channel, chunk of data, last state, current state
                     self.update_channel( channel, np.array(ys), np.array(xs))
 
+
+        # TODO change this (just add up all the individuals fps
         # Set the plot tile if it was changed
-        if self.calculate_fps(self.total_framecount):
-            self.plots[0].setTitle('FPS %s03'%self.fps)
+        #if self.calculate_fps(self.fps_tfc):
+        #    self.plots[0].setTitle('FPS %s03'%self.fps)
         self.running = False
 
 
-    def calculate_fps(self, n_frames):
+    def calculate_fps(self, channel, n_frames):
         # Stores frames and time elapsed and updates when t_update has passed
-        # Return False when there is no new data available
-        if not self.fps_t_start:
-            self.fps_t_start = self.get_timestamp()
+        # List start at 0
+
+        if not self.fps_t_start[channel]:
+            self.fps_t_start[channel] = self.get_timestamp()
 
         t_current = self.get_timestamp()
-        t_elapsed = (t_current - self.fps_t_start).total_seconds()
+        t_elapsed = (t_current - self.fps_t_start[channel]).total_seconds()
 
         if t_elapsed <= self.fps_t_interval:
             # update time not reached yet
-            self.fps_frames_count += n_frames
+            self.fps_frames_count[channel] += n_frames
             return False
         else:
             # update time has been reached --> change self.fps
-            self.fps = self.fps_frames_count / t_elapsed
+            self.fps[channel] = self.fps_frames_count[channel] / t_elapsed
 
             # Reset variables
-            self.fps_t_start = self.get_timestamp()
-            self.fps_frames_count = 0
-            return self.fps
+            self.fps_t_start[channel] = self.get_timestamp()
+            self.fps_frames_count[channel] = 0
+            return self.fps[channel]
 
 
     def run(self):
@@ -875,7 +878,7 @@ class QtThread(StoppableThread):
 
         timer = pg.QtCore.QTimer()
         timer.timeout.connect(self.update)
-        timer.start(500)
+        timer.start(50)
 
         QtGui.QApplication.instance().exec_()
 
