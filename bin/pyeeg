@@ -710,39 +710,41 @@ class QtThread(StoppableThread):
         # Vars to keep track of frames and location of frames
         self.plots = []
         self.curves = []
-        self.data_buffers = []        # Stores numpy data arrays containing the full data list
-        self.framecount = {}          # Stores the number of frames so we can check if it fits in the buffer
-        self.total_framecount = 0     # Stores the total number of frames for all channels combined to calculate FPS
-        self.last_frames = {}         # last_frames is the  dict that stores the last fetched frame by channel
-        self.running = False          # Make sure only one verion of update() is running
+        self.fbs_y = []                     # Stores numpy data arrays (buffers) containing the full data buffer
+        self.fbs_x = []                     # Stores numpy data arrays (buffers) containing the full data buffer
+        self.framecount = [0,0,0,0,0,0,0,0] # Stores the number of frames for every channel so we can check if it fits in the buffer
+        self.total_framecount = 0           # Stores the total number of frames for all channels combined to calculate FPS
+        self.last_frames = {}               # last_frames is the  dict that stores the last fetched frame by channel
+        self.running = False                # Make sure only one verion of update() is running
 
-        self.fps = False            # Keep track of FPS
+        self.fps = False                # Keep track of FPS
         self.fps_frames_count = 0
-        self.fps_t_interval = 1             # The timespan over which the FPS is calculated in seconds
+        self.fps_t_interval = 1         # The timespan over which the FPS is calculated in seconds
         self.fps_t_start = False
         self.fps_t_end = False
 
-        bar_size = 1000
-        self.n_plots = 8
+        buffer_size = 1000              # Initial buffer size
+        self.n_plots = 8                # Number of plots(channels)
 
         # Setup plots and curves fill their contents with empty numpy arrays
         for i in range(0, self.n_plots):
             p = self.win.addPlot(row=i,col=1)
-            p.setRange(xRange=[-bar_size, 0])
+            p.setRange(xRange=[-buffer_size, 0])
             p.setLimits(xMax=0)
             p.setClipToView(True)
             p.setDownsampling(mode='peak')
+            p.showGrid(x=True, y=True)
 
             curve = p.plot(pen=i)
-            data = np.empty(bar_size)
+            data = np.empty(buffer_size)
 
             self.plots.append(p)
             self.curves.append(curve)
-            self.data_buffers.append(data)
-            self.framecount[i] = 0
+            self.fbs_y.append(data)
+            self.fbs_x.append(data)
 
 
-    def update_channel(self, channel, new_frames):
+    def update_channel(self, channel, ys, xs):
         """
         Create empty buffer as large as ROI (region of interest)
         count = count the frames that we collect
@@ -753,42 +755,51 @@ class QtThread(StoppableThread):
             copy old list back to new buffer
         """
 
+        # TODO Overflow errors must have something to do with the size of the buffer
+
         # lists start with zero
         channel = channel - 1
 
         # Short names are good!
         framecount = self.framecount[channel]
-        data_buffer = self.data_buffers[channel]
+        fb_y = self.fbs_y[channel]
+        fb_x = self.fbs_x[channel]
         curve = self.curves[channel]
 
         # Combine the old buffer and the new data
-        data_buffer = np.append(data_buffer, new_frames)
+        fb_y = np.append(fb_y, ys)
+        fb_x = np.append(fb_x, xs)
 
         # update the framecount with the new data (numpy array length is fetched with data.shape[0]
-        framecount += new_frames.shape[0]
+        framecount += ys.shape[0]
 
         # If the length of data is bigger than the buffer, we have to enlarge the buffer
-        if framecount >= data_buffer.shape[0]:
-            log.info('>>> we have to enlarge buffer: {0} >= {1}'.format(framecount, data_buffer.shape[0]))
+        if framecount >= fb_y.shape[0]:
+            log.info('>>> we have to enlarge buffer: {0} >= {1}'.format(framecount, fb_y.shape[0]))
 
             # Backup old bufer
-            tmp = data_buffer
+            tmp_y = fb_y[:]
+            tmp_x = fb_x[:]
             
             # Create new buffer, double the size of the old one
-            data_buffer = np.empty(data_buffer.shape[0] * 2)
+            fb_y = np.empty(fb_y.shape[0] * 2)
+            fb_x = np.empty(fb_x.shape[0] * 2)
 
             # Copy the buffer back to the first half of the new, bigger buffer
-            data_buffer[:tmp.shape[0]] = tmp
+            fb_y[:tmp_y.shape[0]] = tmp_y
+            fb_x[:tmp_x.shape[0]] = tmp_x
 
         # Update pyqtgraph with the first half (new) of the buffer
-        curve.setData(data_buffer[:framecount])
+        #curve.setData(fb_y[:framecount], fb_x[:framecount])
+        curve.setData(fb_y[:framecount])
         curve.setPos(-framecount, 0)
         #self.plots[channel].setTitle('Channel {0} - FPS {1}'.format(channel, self.total_fps))
 
         self.framecount[channel] = framecount
-        self.data_buffers[channel] = data_buffer
+        # Move buffers back to globals
+        self.fbs_y[channel] = fb_y[:]
+        self.fbs_x[channel] = fb_x[:]
         self.curves[channel] = curve
-        #self.total_framecount += framecount
 
 
     def update(self):
@@ -798,7 +809,7 @@ class QtThread(StoppableThread):
 
         self.total_framecount = 0
 
-        for channel in range(1, self.n_plots+1):
+        for channel in range(1, 9):
             if config.get('channel' + str(channel), 'state') == 'on':
 
                 # Set default values for last_items
@@ -820,22 +831,25 @@ class QtThread(StoppableThread):
                     # Set last received frame in self.last_frames
                     self.last_frames[channel] = datas[-1]
 
-                    data_chunk = []
+                    ys = []
+                    xs = []
                     for data in datas:
-                        data_chunk.append(int(data.get_data()))
+                        ys.append(int(data.get_data()))
+                        d = data.get_timestamp()
+                        xs.append(int('{0}{1}{2}'.format(d.hour, d.minute, d.second)))
 
                     # Update the graph with the new data, provide -> channel, chunk of data, last state, current state
-                    self.update_channel( channel, np.array(data_chunk))
+                    self.update_channel( channel, np.array(ys), np.array(xs))
 
+        # Set the plot tile if it was changed
         if self.calculate_fps(self.total_framecount):
-            self.plots[0].setTitle('FPS {0}'.format(self.fps))
+            self.plots[0].setTitle('FPS %s03'%self.fps)
         self.running = False
 
 
     def calculate_fps(self, n_frames):
         # Stores frames and time elapsed and updates when t_update has passed
         # Return False when there is no new data available
-
         if not self.fps_t_start:
             self.fps_t_start = self.get_timestamp()
 
@@ -861,7 +875,7 @@ class QtThread(StoppableThread):
 
         timer = pg.QtCore.QTimer()
         timer.timeout.connect(self.update)
-        timer.start(10)
+        timer.start(500)
 
         QtGui.QApplication.instance().exec_()
 
@@ -939,13 +953,14 @@ class EEG(object):
         rd = rd.split(',')
 
         channel = 0
-        for index in range(3, len(rd)):
+        # Skip the status bits start at byte 4
+        for d in rd[3:11]:
             # TODO find the status bit for loff-n and loff-p
             channel += 1
             if config.get('channel'+ str(channel), 'state') == 'on':
                 data = Data()
                 data.set_channel(channel)
-                data.set_data(rd[index])
+                data.set_data(d)
                 #data.write()   # Should be done in a thread otherwise -> dropped frames
                 #data.display()
                 datalist.add_data(data)
