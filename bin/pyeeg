@@ -707,6 +707,8 @@ class QtThread(StoppableThread):
         self.win = pg.GraphicsWindow()
         self.win.setWindowTitle('EEG')
 
+        # use dict instead of list because using index for channel is complicated
+
         # Vars to keep track of frames and location of frames
         self.plots = []
         self.curves = []
@@ -722,7 +724,7 @@ class QtThread(StoppableThread):
         self.fps_t_start = [False,False,False,False,False,False,False,False]
         self.fps_t_end = [False,False,False,False,False,False,False,False]
 
-        buffer_size = 100              # Initial buffer size
+        buffer_size = 1000              # Initial buffer size
         self.n_plots = 8                # Number of plots(channels)
 
         # Setup plots and curves fill their contents with empty numpy arrays
@@ -878,7 +880,7 @@ class QtThread(StoppableThread):
 
         timer = pg.QtCore.QTimer()
         timer.timeout.connect(self.update)
-        timer.start(50)
+        timer.start(100)
 
         QtGui.QApplication.instance().exec_()
 
