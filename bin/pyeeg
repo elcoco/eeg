@@ -503,6 +503,70 @@ class Config(object):
         return False
 
 
+class ADS1299(object):
+    def __init__(self):
+        self.registers = {}
+        self.registers['ID']          = 0x00
+        self.registers['CONFIG1']     = 0x01
+        self.registers['CONFIG2']     = 0x02
+        self.registers['CONFIG3']     = 0x03
+        self.registers['LOFF']        = 0x04
+        self.registers['CH1SET']      = 0x05
+        self.registers['CH2SET']      = 0x06
+        self.registers['CH3SET']      = 0x07
+        self.registers['CH4SET']      = 0x08
+        self.registers['CH5SET']      = 0x09
+        self.registers['CH6SET']      = 0x0A
+        self.registers['CH7SET']      = 0x0B
+        self.registers['CH8SET']      = 0x0C
+        self.registers['BIAS_SENSP']  = 0x0D
+        self.registers['BIAS_SENSN']  = 0x0E
+        self.registers['LOFF_SENSP']  = 0x0F
+        self.registers['LOFF_SENSN']  = 0x10
+        self.registers['LOFF_FLIP']   = 0x11
+        self.registers['LOFF_STATP']  = 0x12
+        self.registers['LOFF_STATN']  = 0x13
+        self.registers['GPIO']        = 0x14
+        self.registers['MISC1']       = 0x15
+        self.registers['MISC2']       = 0x16
+        self.registers['CONFIG4']     = 0x17
+
+        self.values = {}
+        self.values['ID']          = list('00011110')
+        self.values['CONFIG1']     = list('10010110')
+        self.values['CONFIG2']     = list('11000000')
+        self.values['CONFIG3']     = list('01100000')
+        self.values['LOFF']        = list('00000000')
+        self.values['CH1SET']      = list('01100000')
+        self.values['CH2SET']      = list('01100000')
+        self.values['CH3SET']      = list('01100000')
+        self.values['CH4SET']      = list('01100000')
+        self.values['CH5SET']      = list('01100000')
+        self.values['CH6SET']      = list('01100000')
+        self.values['CH7SET']      = list('01100000')
+        self.values['CH8SET']      = list('01100000')
+        self.values['BIAS_SENSP']  = list('00000000')
+        self.values['BIAS_SENSN']  = list('00000000')
+        self.values['LOFF_SENSP']  = list('00000000')
+        self.values['LOFF_SENSN']  = list('00000000')
+        self.values['LOFF_FLIP']   = list('00000000')
+        self.values['LOFF_STATP']  = list('00000000')
+        self.values['LOFF_STATN']  = list('00000000')
+        self.values['GPIO']        = list('00001111')
+        self.values['MISC1']       = list('00000000')
+        self.values['MISC2']       = list('00000000')
+        self.values['CONFIG4']     = list('00000000')
+
+
+    def get_reg(self, reg):
+        return self.registers[reg], ''.join(self.values[reg])
+
+
+    def set_reg(self, reg, bit, value):
+        self.values[reg][bit-1] = str(value)
+        return self.get_reg(reg)
+
+
 
 class Data(object):
     def __init__(self):
@@ -729,34 +793,24 @@ class QtThread(StoppableThread):
 
         # Setup plots and curves fill their contents with empty numpy arrays
         for i in range(0, self.n_plots):
-            p = self.win.addPlot(row=i,col=1)
-            p.setRange(xRange=[-buffer_size, 0])
-            p.setLimits(xMax=0)
-            p.setClipToView(True)
-            p.setDownsampling(mode='peak')
-            p.showGrid(x=True, y=True)
+            if config.get('channel' + str(i), 'state') == 'on':
+                p = self.win.addPlot(row=i,col=1)
+                p.setRange(xRange=[-buffer_size, 0])
+                p.setLimits(xMax=0)
+                p.setClipToView(True)
+                p.setDownsampling(mode='peak')
+                p.showGrid(x=True, y=True)
 
-            curve = p.plot(pen=i)
-            #data = np.empty(buffer_size)
-            data = np.empty(1)
+                curve = p.plot(pen=i)
+                data = np.empty(1)
 
-            self.plots.append(p)
-            self.curves.append(curve)
-            self.fbs_y.append(data)
-            self.fbs_x.append(data)
+                self.plots.append(p)
+                self.curves.append(curve)
+                self.fbs_y.append(data)
+                self.fbs_x.append(data)
 
 
     def update_channel(self, channel, ys, xs):
-        """
-        Create empty buffer as large as ROI (region of interest)
-        count = count the frames that we collect
-
-        if countofframes + new frames >= buffer size
-            backup the last list + new data
-            create new buffer which is bigger
-            copy old list back to new buffer
-        """
-
         # TODO Overflow errors must have something to do with the size of the buffer
 
         # lists start with zero
@@ -854,7 +908,6 @@ class QtThread(StoppableThread):
     def calculate_fps(self, channel, n_frames):
         # Stores frames and time elapsed and updates when t_update has passed
         # List start at 0
-
         if not self.fps_t_start[channel]:
             self.fps_t_start[channel] = self.get_timestamp()
 
@@ -960,15 +1013,13 @@ class EEG(object):
         channel = 0
         # Skip the status bits start at byte 4
         for d in rd[3:11]:
-            # TODO find the status bit for loff-n and loff-p
             channel += 1
-            if config.get('channel'+ str(channel), 'state') == 'on':
-                data = Data()
-                data.set_channel(channel)
-                data.set_data(d)
-                #data.write()   # Should be done in a thread otherwise -> dropped frames
-                #data.display()
-                datalist.add_data(data)
+            if d:
+                if config.get('channel'+ str(channel), 'state') == 'on':
+                    data = Data()
+                    data.set_channel(channel)
+                    data.set_data(d)
+                    datalist.add_data(data)
 
 
     def send_channel_config(self):
@@ -1012,6 +1063,14 @@ class EEG(object):
         config.set('channel6', 'state', 'on')
         config.set('channel7', 'state', 'on')
         config.set('channel8', 'state', 'on')
+        config.set('channel1', 'gain', '24')
+        config.set('channel2', 'gain', '24')
+        config.set('channel3', 'gain', '24')
+        config.set('channel4', 'gain', '24')
+        config.set('channel5', 'gain', '24')
+        config.set('channel6', 'gain', '24')
+        config.set('channel7', 'gain', '24')
+        config.set('channel8', 'gain', '24')
         config.set('log', 'path', '/home/eco/eeg.txt')
 
 
@@ -1074,6 +1133,13 @@ class EEG(object):
         # Create socket
         self.socket = Socket(config.get('server', 'address'), config.get('server', 'port'))
 
+        self.socket.send('WREG,0x05,0x30' , prefix=True)
+        print(hex(int('11000000',2)))
+
+        reg,value = ads1299.get_reg('CONFIG1')
+        ads1299.set_reg('CONFIG1', 1, 0)
+        reg,value = ads1299.get_reg('CONFIG1')
+
         #self.plot() 
         self.handle_arg()
 
@@ -1091,6 +1157,7 @@ thread for qt app checkt get_last_n() for new entries
 if __name__ == "__main__":
     config = Config()
     datalist = DataList()
+    ads1299 = ADS1299()
     log = Log()
     log.color('>>>', 'green')
     log.color('<<<', 'blue')
