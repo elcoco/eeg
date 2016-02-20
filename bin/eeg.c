@@ -526,6 +526,106 @@ int chnset(int channel, int state) {
     //printf("%d - %d\n", channel, state);
     if (state == 1) { 
         if (channel == 1)
+            wreg(REG.CH1SET,  0x30);
+        else if (channel == 2)
+            wreg(REG.CH2SET,  0x30);
+        else if (channel == 3)
+            wreg(REG.CH3SET,  0x30);
+        else if (channel == 4)
+            wreg(REG.CH4SET,  0x30);
+        else if (channel == 5)
+            wreg(REG.CH5SET,  0x30);
+        else if (channel == 6)
+            wreg(REG.CH6SET,  0x30);
+        else if (channel == 7)
+            wreg(REG.CH7SET,  0x30);
+        else if (channel == 8)
+            wreg(REG.CH8SET,  0x30);
+    }
+    else {
+        if (channel == 1)
+            wreg(REG.CH1SET,  0xE0);
+        else if (channel == 2)
+            wreg(REG.CH2SET,  0xE0);
+        else if (channel == 3)
+            wreg(REG.CH3SET,  0xE0);
+        else if (channel == 4)
+            wreg(REG.CH4SET,  0xE0);
+        else if (channel == 5)
+            wreg(REG.CH5SET,  0xE0);
+        else if (channel == 6)
+            wreg(REG.CH6SET,  0xE0);
+        else if (channel == 7)
+            wreg(REG.CH7SET,  0xE0);
+        else if (channel == 8)
+            wreg(REG.CH8SET,  0xE0);
+    };
+};
+
+
+int setChannel(char *data) {
+    // Extract the channels from received data and set channels
+    char * opt = malloc(25);
+    int i = 0;
+    int channel;
+    int state;
+
+    opt = strtok(data, ",");
+
+    while (opt != NULL) {
+        i++;
+        if (i == 4) {
+            printf("break\n");
+            break;
+        }
+
+        if (i == 2) {
+            if (memcmp(opt, "1", 1) == 0)
+                channel = 1;
+            else if (memcmp(opt, "2", 1) == 0)
+                channel = 2;
+            else if (memcmp(opt, "3", 1) == 0)
+                channel = 3;
+            else if (memcmp(opt, "4", 1) == 0)
+                channel = 4;
+            else if (memcmp(opt, "5", 1) == 0)
+                channel = 5;
+            else if (memcmp(opt, "6", 1) == 0)
+                channel = 6;
+            else if (memcmp(opt, "7", 1) == 0)
+                channel = 7;
+            else if (memcmp(opt, "8", 1) == 0)
+                channel = 8;
+
+        };
+        if (i == 3) {
+            if (memcmp(opt, "1", 1) == 0)
+                state = 1;
+            else
+                state = 0;
+        };
+
+        opt = strtok(NULL, ",");
+    };
+    chnset(channel, state);
+};
+
+int setWreg(char *data) {
+    uint8_t *reg;
+    uint8_t *command;
+    reg = strtok(data, ",");
+    command = strtok(NULL, ",");
+    //strtok(data, ",");
+    //reg = strtok(NULL, ",");
+    //command = strtok(NULL, ",");
+    wreg(*reg,*command);
+}
+
+/*
+int chnset(int channel, int state) {
+    //printf("%d - %d\n", channel, state);
+    if (state == 1) { 
+        if (channel == 1)
             wreg(REG.CH1SET,  0x60);
         else if (channel == 2)
             wreg(REG.CH2SET,  0x60);
@@ -561,7 +661,7 @@ int chnset(int channel, int state) {
             wreg(REG.CH8SET,  0xE0);
     };
 };
-
+*/
 
 int handleCommands(int socketfd) {
     int read_size;
@@ -578,49 +678,11 @@ int handleCommands(int socketfd) {
 
         // Change settings
         if (memcmp(data, "CHNSET", 6) == 0 ) {
-            char * opt = malloc(25);
-            int i = 0;
-            int channel;
-            int state;
+            setChannel(data);
+        }
 
-            opt = strtok(data, ",");
-
-            while (opt != NULL) {
-                i++;
-                if (i == 4) {
-                    printf("break\n");
-                    break;
-                }
-
-                if (i == 2) {
-                    if (memcmp(opt, "1", 1) == 0)
-                        channel = 1;
-                    else if (memcmp(opt, "2", 1) == 0)
-                        channel = 2;
-                    else if (memcmp(opt, "3", 1) == 0)
-                        channel = 3;
-                    else if (memcmp(opt, "4", 1) == 0)
-                        channel = 4;
-                    else if (memcmp(opt, "5", 1) == 0)
-                        channel = 5;
-                    else if (memcmp(opt, "6", 1) == 0)
-                        channel = 6;
-                    else if (memcmp(opt, "7", 1) == 0)
-                        channel = 7;
-                    else if (memcmp(opt, "8", 1) == 0)
-                        channel = 8;
-
-                };
-                if (i == 3) {
-                    if (memcmp(opt, "1", 1) == 0)
-                        state = 1;
-                    else
-                        state = 0;
-                };
-
-                opt = strtok(NULL, ",");
-            };
-            chnset(channel, state);
+        else if (memcmp(data, "WREG", 4) == 0 ) {
+            setWreg(data);
         }
 
         // Send commands
@@ -637,14 +699,14 @@ int handleCommands(int socketfd) {
             setupNoiseCheck();
             sendData(socketfd);
             transfer(OP.STOP);
-            return 0;
+            //return 0;
         }
 
         else if (memcmp(data, "TESTSIGNAL", 10) == 0 ) {
             setupTestSignal();
             sendData(socketfd);
             transfer(OP.STOP);
-            return 0;
+            //return 0;
         }
 
         else if (memcmp(data, "START", 5) == 0 ) {
@@ -652,7 +714,7 @@ int handleCommands(int socketfd) {
             transfer(OP.RDATAC);
             sendData(socketfd);
             transfer(OP.STOP);
-            return 0;
+            //return 0;
         }
 
         // Check if connection is broken
