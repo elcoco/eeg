@@ -580,19 +580,31 @@ class ADS1299(object):
     def set_channel(self, channel, state=True):
         # Enable/disable channel
         if state:
-            log.info('setting channel on {0}'.format(channel))
+            log.info('Enabling channel: {0}'.format(channel))
             return self.set_reg('CH{0}SET'.format(str(channel)), 1, 0)
         else:
+            log.info('Disabling channel: {0}'.format(channel))
             return self.set_reg('CH{0}SET'.format(str(channel)), 1, 1)
 
 
     def set_srb1(self, state=True):
         # Enable/disable channel
         if state:
-            log.info('setting srb on ground')
+            log.info('Connecting SRB1 to ground')
             return self.set_reg('MISC1', 3, 1)
         else:
+            log.info('Disconnecting SRB1')
             return self.set_reg('MISC1', 3, 0)
+
+
+    def set_internal_ref(self, state=True):
+        # Enable/disable channel
+        if state:
+            log.info('Using internal reference')
+            return self.set_reg('CONFIG3', 1, 1)
+        else:
+            log.info('Using external reference')
+            return self.set_reg('CONFIG3', 1, 0)
 
 
     def set_gain(self, channel, level):
@@ -608,7 +620,6 @@ class ADS1299(object):
         self.set_reg('CH{0}SET'.format(str(channel)), 2, gain[level][0])
         self.set_reg('CH{0}SET'.format(str(channel)), 3, gain[level][1])
         self.set_reg('CH{0}SET'.format(str(channel)), 4, gain[level][2])
-
 
 
 
@@ -730,7 +741,7 @@ class Socket(object):
             sys.exit()
 
 
-    def send(self, data, prefix=False):
+    def send(self, data, prefix=True):
         # TODO check if connection is still alive
         if prefix:
             data = str(len(data)).rjust(3, '0') + data
@@ -1047,7 +1058,7 @@ class EEG(object):
             # If run-time has reached, send the STOP command to the server
             if start_time + int(config.get('general', 'run-time')) <= self.get_timestamp():
                 log.info('Run time reached')
-                self.socket.send('STOP', prefix=True)
+                self.socket.send('STOP')
 
                 log.info("Total frames: {0}".format(total_frames))
                 log.info("Total time (s): {0}".format(self.get_timestamp() - start_time))
@@ -1089,20 +1100,56 @@ class EEG(object):
 
 
     def send_channel_config(self):
+        # Read Config() and change ADS1299() and send over socket
+        log.info('Sending channel config to server')
         for channel in range(1, 8+1):
+            if config.get('channel{0}'.format(channel), 'state') == 'on':
+                ads1299.set_channel(channel)
+            else:
+                ads1299.set_channel(channel, state=False)
+
+            ads1299.set_gain(channel, config.get('channel{0}'.format(channel), 'gain'))
+
             c, v = ads1299.get_reg('CH{0}SET'.format(str(channel)))
-            self.socket.send('WREG,{0},{1}'.format(c, v), prefix=True)
+            self.socket.send('WREG,{0},{1}'.format(c, v))
 
 
     def set_srb1(self, state=True):
         if state:
             config.set('srb1', 'state', 'ground')
-            ads1299.set_srb1()
+            return
+        else:
+            config.set('srb1', 'state', 'disconnected')
             return
 
 
     def send_srb1(self):
-        self.socket.send('WREG,{0},{1}'.format('MISC1', ads1299.get_reg('MISC1')))
+        log.info('Sending SRB1 config to server')
+        if config.get('srb1', 'state') == 'ground':
+            ads1299.set_srb1()
+        else:
+            ads1299.set_srb1(state=False)
+
+        self.socket.send('WREG,{0},{1}'.format(ads1299.get_reg('MISC1')[0], ads1299.get_reg('MISC1')[1]))
+
+
+    def set_ref(self, state=True):
+        if state:
+            config.set('general', 'reference', 'internal')
+            return
+        else:
+            config.set('general', 'internal', 'external')
+            return
+
+
+    def send_ref(self):
+        log.info('Sending reference config to server')
+        if config.get('general', 'reference') == 'internal':
+            ads1299.set_internal_ref()
+        else:
+            ads1299.set_internal_ref(state=False)
+
+        self.socket.send('WREG,{0},{1}'.format(ads1299.get_reg('CONFIG3')[0], ads1299.get_reg('CONFIG3')[1]))
 
 
     def set_channel(self, channels):
@@ -1113,10 +1160,8 @@ class EEG(object):
         for channel in range(1, 8+1):
             if channel in channels:
                 config.set('channel' + str(channel), 'state', 'on')
-                ads1299.set_channel(channel)
             else:
                 config.set('channel' + str(channel), 'state', 'off')
-                ads1299.set_channel(channel, state=False)
 
 
     def set_gain(self, level):
@@ -1124,11 +1169,9 @@ class EEG(object):
         level = [ int(x) for x in level ]
         if len(level) == 2:
             config.set('channel' + str(level[0]), 'gain', level[1])
-            ads1299.set_gain(level[0], level[1])
         elif len(level) == 1:
             for channel in range(1, 8+1):
                 config.set('channel' + str(channel), 'gain', level[0])
-                ads1299.set_gain(channel, level[0])
 
 
     def usage(self):
@@ -1151,6 +1194,7 @@ class EEG(object):
         config.set('server', 'port', '8888')
         config.set('general', 'length-size', '3')
         config.set('general', 'run-time', '60')
+        config.set('general', 'reference', 'internal')
         config.set('channel1', 'state', 'on')
         config.set('channel2', 'state', 'on')
         config.set('channel3', 'state', 'on')
@@ -1205,19 +1249,19 @@ class EEG(object):
             if "--start" in arg:
                 # NOTE is not receiving on the c side!!
                 self.send_channel_config()
-                self.socket.send('START', prefix=True)
+                self.socket.send('START')
                 self.get_data()
 
             elif "--noise-check" in arg:
-                self.socket.send('NOISECHECK', prefix=True)
+                self.socket.send('NOISECHECK')
                 self.get_data()
 
             elif "--test-signal" in arg:
-                self.socket.send('TESTSIGNAL', prefix=True)
+                self.socket.send('TESTSIGNAL')
                 self.get_data()
 
             elif "--shutdown" in arg:
-                self.socket.send('SHUTDOWN', prefix=True)
+                self.socket.send('SHUTDOWN')
 
         return False
 
@@ -1227,8 +1271,12 @@ class EEG(object):
 
         # Create socket
         self.socket = Socket(config.get('server', 'address'), config.get('server', 'port'))
+        
+        # Set some defaults
         self.set_srb1()
         self.send_srb1()
+        self.set_ref()
+        self.send_ref()
 
         self.handle_arg()
 
