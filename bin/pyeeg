@@ -720,8 +720,8 @@ class Socket(object):
 
 
     def sanitize(self, data):
-        data = data.strip('\n')
-        return data
+        return data.strip('\n')
+        
 
 
 
@@ -800,7 +800,7 @@ class QtThread(StoppableThread):
 
         # Setup plots and curves fill their contents with empty numpy arrays
         for i in range(0, self.n_plots):
-            if config.get('channel' + str(i), 'state') == 'on':
+            if config.get('channel' + str(i+1), 'state') == 'on':
                 p = self.win.addPlot(row=i,col=1)
                 p.setRange(xRange=[-buffer_size, 0])
                 p.setLimits(xMax=0)
@@ -976,22 +976,36 @@ class EEG(object):
             thread.stop()
 
 
+    def test(self, var):
+        try:
+            int(var)
+            return True
+        except:
+            return False
+
     def get_data(self):
         start_time = self.get_timestamp()
         total_frames = 0
 
         while True:
+            # TODO Some of the data is corrupted
             # Receive length of data first
+            while True:
+                if self.socket.receive(1) == '#':
+                    # We found the first char of a frame
+                    break
+
             length = self.socket.receive(config.get('general', 'length-size'))
-            if length:
+            if self.test(length):
                 # then get the full frame 
                 data = self.socket.receive(length)
                 if data:
-                    self.add_data(data)
-                    total_frames += 1
+                    if self.add_data(data):
+                        total_frames += 1
+                else:
+                    log.error('Error getting data, no data')
             else:
-                log.error('Error getting data')
-                return False
+                log.error('Error getting data, length is corrupted: {0}'.format(length))
 
             # If run-time has reached, send the STOP command to the server
             if start_time + int(config.get('general', 'run-time')) <= self.get_timestamp():
@@ -1016,6 +1030,9 @@ class EEG(object):
     def add_data(self, rd):
         # Create data objects and add to datalist object
         rd = rd.split(',')
+        if len(rd) != 11:
+            log.error('Data is corrupted!: {0}'.format(','.join(rd)))
+            return False
 
         channel = 0
         # Skip the status bits start at byte 4
@@ -1023,10 +1040,13 @@ class EEG(object):
             channel += 1
             if d:
                 if config.get('channel'+ str(channel), 'state') == 'on':
+                    if d == 0:
+                        print(d)
                     data = Data()
                     data.set_channel(channel)
                     data.set_data(d)
                     datalist.add_data(data)
+        return True
 
 
     def send_channel_config(self):
