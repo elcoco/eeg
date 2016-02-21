@@ -503,6 +503,7 @@ class Config(object):
         return False
 
 
+
 class ADS1299(object):
     def __init__(self):
         self.registers = {}
@@ -702,7 +703,7 @@ class Socket(object):
 
         try:
             self.socket.sendall(data_bytes)
-            log.info('>>> {0}'.format(data))
+            log.info('<<< {0}'.format(data))
             return True
         except:
             log.error('Failed to send data')
@@ -722,7 +723,6 @@ class Socket(object):
     def sanitize(self, data):
         return data.strip('\n')
         
-
 
 
 class PlotThread(StoppableThread):
@@ -983,6 +983,7 @@ class EEG(object):
         except:
             return False
 
+
     def get_data(self):
         start_time = self.get_timestamp()
         total_frames = 0
@@ -990,12 +991,13 @@ class EEG(object):
         while True:
             # TODO Some of the data is corrupted
             # Receive length of data first
-            #while True:
-            #    if self.socket.receive(1) == '#':
-                    # We found the first char of a frame
-            #        break
-
-            length = self.socket.receive(config.get('general', 'length-size'))
+            skipped = 0
+            while True:
+                length = self.socket.receive(4)
+                if length[0] == '#':
+                    length = length[1:]
+                    break
+                skipped += 1
             if self.test(length):
                 # then get the full frame 
                 data = self.socket.receive(length)
@@ -1015,6 +1017,8 @@ class EEG(object):
                 log.info("Total frames: {0}".format(total_frames))
                 log.info("Total time (s): {0}".format(self.get_timestamp() - start_time))
                 log.info("FPS: {0}".format(total_frames / (self.get_timestamp() - start_time)))
+                log.info("Skipped chars: {0}".format(skipped))
+
                 # TODO: receive total frames sent from server and calculate dropped packages
                 # TODO: Packet timing is important since we want to do spectrum analysis
                 return True
@@ -1054,10 +1058,12 @@ class EEG(object):
             state = config.get('channel' + str(channel), 'state')
             if state == "on":
                 c, v = ads1299.set_reg('CH{0}SET'.format(str(channel)), 1, 0)
-                print(c,v)
             else:
                 c, v = ads1299.set_reg('CH{0}SET'.format(str(channel)), 1, 1)
-                print(c,v)
+
+        # TODO Set gain bits
+        # TODO Set SRB1 from python
+
 
             self.socket.send('WREG,{0},{1}'.format(c, v), prefix=True)
 
@@ -1071,6 +1077,16 @@ class EEG(object):
                 config.set('channel' + str(channel), 'state', 'on')
             else:
                 config.set('channel' + str(channel), 'state', 'off')
+
+
+    def set_gain(self, value):
+        value = value.split(',')
+        value = [ int(x) for x in value ]
+        if len(value) == 2:
+            config.set('channel' + str(value[0]), 'gain', value[1])
+        if len(value) == 1:
+            for channel in range(1, 8+1):
+                config.set('channel' + str(channel), 'gain', value[0])
 
 
     def usage(self):
@@ -1128,6 +1144,8 @@ class EEG(object):
                 elif '--channels=' in arg:
                     self.set_channel_config(value)
 
+                elif '--gain=' in arg:
+                    self.set_gain(value)
 
         # Commands
         for arg in sys.argv:
