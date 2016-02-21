@@ -586,6 +586,15 @@ class ADS1299(object):
             return self.set_reg('CH{0}SET'.format(str(channel)), 1, 1)
 
 
+    def set_srb1(self, state=True):
+        # Enable/disable channel
+        if state:
+            log.info('setting srb on ground')
+            return self.set_reg('MISC1', 3, 1)
+        else:
+            return self.set_reg('MISC1', 3, 0)
+
+
     def set_gain(self, channel, level):
         gain = {}
         gain[1] = list('000')
@@ -846,7 +855,6 @@ class QtThread(StoppableThread):
 
     def update_channel(self, channel, ys, xs):
         # TODO Overflow errors must have something to do with the size of the buffer
-
         # lists start with zero
         channel = channel - 1
 
@@ -1086,6 +1094,17 @@ class EEG(object):
             self.socket.send('WREG,{0},{1}'.format(c, v), prefix=True)
 
 
+    def set_srb1(self, state=True):
+        if state:
+            config.set('srb1', 'state', 'ground')
+            ads1299.set_srb1()
+            return
+
+
+    def send_srb1(self):
+        self.socket.send('WREG,{0},{1}'.format('MISC1', ads1299.get_reg('MISC1')))
+
+
     def set_channel(self, channels):
         # Set channel in Config() and ADS1299()
         channels = channels.split(',')
@@ -1122,6 +1141,8 @@ class EEG(object):
         print("  --run-time=<seconds>")
         print("  --channels=1,2,3,4,5,6,7,8")
         print("  --gain=<channel, level> or <level (for all channels)>")
+        print("      level = 1,2,4,6,8,12,24")
+
         print("  --shutdown")
 
 
@@ -1146,6 +1167,7 @@ class EEG(object):
         config.set('channel6', 'gain', '24')
         config.set('channel7', 'gain', '24')
         config.set('channel8', 'gain', '24')
+        config.set('srb1',     'state','ground')
         config.set('log', 'path', '/home/eco/eeg.txt')
 
 
@@ -1201,26 +1223,14 @@ class EEG(object):
 
 
     def run(self):
-        #self.start_threads()
         self.set_config_defaults()
-        # Should go in a thread
-        #self.setup_plot()
-        #self.plot()
 
         # Create socket
         self.socket = Socket(config.get('server', 'address'), config.get('server', 'port'))
+        self.set_srb1()
+        self.send_srb1()
 
-        #self.plot() 
         self.handle_arg()
-
-        # NOTE Live updating plot
-
-""" 
-Create a method get_last_n(last_item, amount)
-retrieve the newest entries since last_item
-
-thread for qt app checkt get_last_n() for new entries
-""" 
 
 
 
