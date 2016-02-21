@@ -18,6 +18,7 @@ int startSPI();
 int closeSPI();
 int setupNoiseCheck();
 int setupTestSignal();
+int setupCH1Signal();
 int handleCommands(int);
 uint8_t transfer(uint8_t);
 uint8_t rreg(uint8_t);
@@ -27,6 +28,8 @@ int msgInbound(char[256]);
 int msgOutbound(char[256]);
 int sendData(int);
 char * get_data(int, char *);
+int chnset(int, int);
+//unsigned int capture_data();
 
 /*
 RPI2 SPI pin layout
@@ -519,6 +522,94 @@ char * get_data(int socketfd, char *msg) {
 }
 
 
+int chnset(int channel, int state) {
+    //printf("%d - %d\n", channel, state);
+    if (state == 1) { 
+        if (channel == 1)
+            wreg(REG.CH1SET,  0x30);
+        else if (channel == 2)
+            wreg(REG.CH2SET,  0x30);
+        else if (channel == 3)
+            wreg(REG.CH3SET,  0x30);
+        else if (channel == 4)
+            wreg(REG.CH4SET,  0x30);
+        else if (channel == 5)
+            wreg(REG.CH5SET,  0x30);
+        else if (channel == 6)
+            wreg(REG.CH6SET,  0x30);
+        else if (channel == 7)
+            wreg(REG.CH7SET,  0x30);
+        else if (channel == 8)
+            wreg(REG.CH8SET,  0x30);
+    }
+    else {
+        if (channel == 1)
+            wreg(REG.CH1SET,  0xE0);
+        else if (channel == 2)
+            wreg(REG.CH2SET,  0xE0);
+        else if (channel == 3)
+            wreg(REG.CH3SET,  0xE0);
+        else if (channel == 4)
+            wreg(REG.CH4SET,  0xE0);
+        else if (channel == 5)
+            wreg(REG.CH5SET,  0xE0);
+        else if (channel == 6)
+            wreg(REG.CH6SET,  0xE0);
+        else if (channel == 7)
+            wreg(REG.CH7SET,  0xE0);
+        else if (channel == 8)
+            wreg(REG.CH8SET,  0xE0);
+    };
+};
+
+
+int setChannel(char *data) {
+    // Extract the channels from received data and set channels
+    char * opt = malloc(25);
+    int i = 0;
+    int channel;
+    int state;
+
+    opt = strtok(data, ",");
+
+    while (opt != NULL) {
+        i++;
+        if (i == 4) {
+            printf("break\n");
+            break;
+        }
+
+        if (i == 2) {
+            if (memcmp(opt, "1", 1) == 0)
+                channel = 1;
+            else if (memcmp(opt, "2", 1) == 0)
+                channel = 2;
+            else if (memcmp(opt, "3", 1) == 0)
+                channel = 3;
+            else if (memcmp(opt, "4", 1) == 0)
+                channel = 4;
+            else if (memcmp(opt, "5", 1) == 0)
+                channel = 5;
+            else if (memcmp(opt, "6", 1) == 0)
+                channel = 6;
+            else if (memcmp(opt, "7", 1) == 0)
+                channel = 7;
+            else if (memcmp(opt, "8", 1) == 0)
+                channel = 8;
+
+        };
+        if (i == 3) {
+            if (memcmp(opt, "1", 1) == 0)
+                state = 1;
+            else
+                state = 0;
+        };
+
+        opt = strtok(NULL, ",");
+    };
+    chnset(channel, state);
+};
+
 int setWreg(char *data) {
     // Extract the register and command data from received data and send them to wreg
     uint8_t *reg;
@@ -533,6 +624,8 @@ int setWreg(char *data) {
     long ret_command = strtol(command, &ptr, 16);
 
     wreg(ret_reg,ret_command);
+
+
 }
 
 
@@ -550,11 +643,15 @@ int handleCommands(int socketfd) {
         get_data(socketfd, data);
 
         // Change settings
-        if (memcmp(data, "WREG", 4) == 0 ) {
+        if (memcmp(data, "CHNSET", 6) == 0 ) {
+            setChannel(data);
+        }
+
+        else if (memcmp(data, "WREG", 4) == 0 ) {
             setWreg(data);
         }
 
-        // Send OP commands
+        // Send commands
         // Use memcmp() instead of strcmp() if string is not \0 terminated
         else if (memcmp(data, "QUIT", 4) == 0 ) {
             return 0;
@@ -645,3 +742,101 @@ void startSocket(int *socketfd, int *socketfd_old) {
     else
         printf("Connected to client\n");
 }
+
+
+
+/*
+        self.spi_speed = 5000
+        #self.spi_speed = 2000000
+        #self.spi_speed = 2048000
+        self.spi_bus = 0
+        self.spi_device = 0
+
+        # SPI setup
+        self.spi = SPI(self.spi_bus, self.spi_device, self.spi_speed)
+
+        #GPIO init
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(self.pin_pwdn, GPIO.OUT)
+        GPIO.setup(self.pin_cs, GPIO.OUT)
+        GPIO.setup(self.pin_reset, GPIO.OUT)
+
+
+        Notation 0x00 == 00h
+        if 8-bit add leading zeroes till 2x4 chars
+
+        CONVERSION TABLE
+        Binary      Octal   Decimal     Hex
+        0000B       00Q     00          00H
+        0001B       01Q     01          01H
+        0010B       02Q     02          02H
+        0011B       03Q     03          03H
+        0100B       04Q     04          04H
+        0101B       05Q     05          05H
+        0110B       06Q     06          06H
+        0111B       07Q     07          07H
+        1000B       10Q     08          08H
+        1001B       11Q     09          09H
+        1010B       12Q     10          0AH
+        1011B       13Q     11          0BH
+        1100B       14Q     12          0CH
+        1101B       15Q     13          0DH
+        1110B       16Q     14          0EH
+        1111B       17Q     15          0FH
+        1 0000B     20Q     16          10H
+
+
+        OPCODES
+        wakeup  - 0000 0010 (02h)
+        standby - 0000 0100 (04h)
+        reset   - 0000 0110 (06h)
+        start   - 0000 1000 (08h)
+        stop    - 0000 1010 (0Ah)
+        rdatac  - 0001 0000 (10h)
+        sdatac  - 0001 0001 (11h)
+        rdata   - 0001 0010 (12h)
+        rreg    - 001r rrrr (02h)
+                  000n nnnn (00h)
+
+
+        # wreg is a two byte opcode followed by the register data input in MSB-first format
+        wreg    - 010r rrrr (04h)
+                  000n nnnn (00h)
+
+        r rrrr = adress
+        n nnnn = number of registers to be read or written starting from 00h (so that means MINUS ONE!!)
+
+        EXAMPLES:
+        Write to 02h (config3)
+        WREG          = 04h - 0100
+        CONFIG3       = 02h - 0010
+        START_CONFIG  = 00h - 0000
+        bit 3         = 02h - 0010 
+        Bits to Send: 0100 0010 0000 0010 -> 66, 2
+
+        Read register 00h (config0)
+        RREG          = 02h - 0010
+        CONFIG0       = 00h - 0000
+        PREFIX        = 00h - 0000
+        BITS 0        = 00h - 0000
+        Bits to Send: 0010 0000 0000 0000 -> 32, 0
+
+
+        Example write in C: (from: https://github.com/OpenBCI/OpenBCI-V2hardware-DEPRECATED/blob/master/Arduino/Libraries/ADS1299/ADS1299.cpp#L194)
+
+        void ADS1299::WREG(byte _address, byte _value) {    //  Write ONE register at _address
+            byte opcode1 = _address + 0x40;     //  WREG expects 010rrrrr where rrrrr = _address
+            digitalWrite(CS, LOW);              //  open SPI
+            transfer(opcode1);                  //  Send WREG command & address
+            transfer(0x00);                     //  Send number of registers to read -1
+            transfer(_value);                   //  Write the value to the register
+            digitalWrite(CS, HIGH);             //  close SPI
+            regData[_address] = _value;         //  update the mirror array
+            if(verbose){                        //  verbose output
+                Serial.print(F("Register "));
+                printHex(_address);
+                Serial.println(F(" modified."));
+            }
+        }
+
+*/
