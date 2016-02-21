@@ -990,10 +990,10 @@ class EEG(object):
         while True:
             # TODO Some of the data is corrupted
             # Receive length of data first
-            while True:
-                if self.socket.receive(1) == '#':
+            #while True:
+            #    if self.socket.receive(1) == '#':
                     # We found the first char of a frame
-                    break
+            #        break
 
             length = self.socket.receive(config.get('general', 'length-size'))
             if self.test(length):
@@ -1038,14 +1038,14 @@ class EEG(object):
         # Skip the status bits start at byte 4
         for d in rd[3:11]:
             channel += 1
-            if d:
-                if config.get('channel'+ str(channel), 'state') == 'on':
-                    if d == 0:
-                        print(d)
-                    data = Data()
-                    data.set_channel(channel)
-                    data.set_data(d)
-                    datalist.add_data(data)
+            if config.get('channel'+ str(channel), 'state') == 'on':
+                if d == 0:
+                    log.error('Data is 0')
+                    return False
+                data = Data()
+                data.set_channel(channel)
+                data.set_data(d)
+                datalist.add_data(data)
         return True
 
 
