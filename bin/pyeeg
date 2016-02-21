@@ -562,6 +562,7 @@ class ADS1299(object):
     def get_reg(self, reg):
         return '0x{:02x}'.format(self.registers[reg]), hex(int(''.join(self.values[reg]),2))
 
+
     def get_reg_bak(self, reg):
         ret_reg = hex(self.registers[reg])
         v= ''.join(self.values[reg])
@@ -570,9 +571,35 @@ class ADS1299(object):
         print(ba.hexlify(v.encode()))
         return ret_reg,v
 
+
     def set_reg(self, reg, bit, value):
         self.values[reg][bit-1] = str(value)
         return self.get_reg(reg)
+
+
+    def set_channel(self, channel, state=True):
+        # Enable/disable channel
+        if state:
+            log.info('setting channel on {0}'.format(channel))
+            return self.set_reg('CH{0}SET'.format(str(channel)), 1, 0)
+        else:
+            return self.set_reg('CH{0}SET'.format(str(channel)), 1, 1)
+
+
+    def set_gain(self, channel, level):
+        gain = {}
+        gain[1] = list('000')
+        gain[2] = list('001')
+        gain[4] = list('010')
+        gain[6] = list('011')
+        gain[8] = list('100')
+        gain[12] = list('101')
+        gain[24] = list('110')
+
+        self.set_reg('CH{0}SET'.format(str(channel)), 2, gain[level][0])
+        self.set_reg('CH{0}SET'.format(str(channel)), 3, gain[level][1])
+        self.set_reg('CH{0}SET'.format(str(channel)), 4, gain[level][2])
+
 
 
 
@@ -1055,38 +1082,34 @@ class EEG(object):
 
     def send_channel_config(self):
         for channel in range(1, 8+1):
-            state = config.get('channel' + str(channel), 'state')
-            if state == "on":
-                c, v = ads1299.set_reg('CH{0}SET'.format(str(channel)), 1, 0)
-            else:
-                c, v = ads1299.set_reg('CH{0}SET'.format(str(channel)), 1, 1)
-
-        # TODO Set gain bits
-        # TODO Set SRB1 from python
-
-
+            c, v = ads1299.get_reg('CH{0}SET'.format(str(channel)))
             self.socket.send('WREG,{0},{1}'.format(c, v), prefix=True)
 
 
-    def set_channel_config(self, channels):
+    def set_channel(self, channels):
+        # Set channel in Config() and ADS1299()
         channels = channels.split(',')
         channels = [ int(x) for x in channels ]
 
         for channel in range(1, 8+1):
             if channel in channels:
                 config.set('channel' + str(channel), 'state', 'on')
+                ads1299.set_channel(channel)
             else:
                 config.set('channel' + str(channel), 'state', 'off')
+                ads1299.set_channel(channel, state=False)
 
 
-    def set_gain(self, value):
-        value = value.split(',')
-        value = [ int(x) for x in value ]
-        if len(value) == 2:
-            config.set('channel' + str(value[0]), 'gain', value[1])
-        if len(value) == 1:
+    def set_gain(self, level):
+        level = level.split(',')
+        level = [ int(x) for x in level ]
+        if len(level) == 2:
+            config.set('channel' + str(level[0]), 'gain', level[1])
+            ads1299.set_gain(level[0], level[1])
+        elif len(level) == 1:
             for channel in range(1, 8+1):
-                config.set('channel' + str(channel), 'gain', value[0])
+                config.set('channel' + str(channel), 'gain', level[0])
+                ads1299.set_gain(channel, level[0])
 
 
     def usage(self):
@@ -1094,6 +1117,11 @@ class EEG(object):
         print("OPTIONS:")
         print("  --noise-check")
         print("  --test-signal")
+        print("  --plot")
+        print("  --start")
+        print("  --run-time=<seconds>")
+        print("  --channels=1,2,3,4,5,6,7,8")
+        print("  --gain=<channel, level> or <level (for all channels)>")
         print("  --shutdown")
 
 
@@ -1142,7 +1170,7 @@ class EEG(object):
                     config.set('server', key, value)
 
                 elif '--channels=' in arg:
-                    self.set_channel_config(value)
+                    self.set_channel(value)
 
                 elif '--gain=' in arg:
                     self.set_gain(value)
