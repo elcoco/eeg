@@ -81,19 +81,9 @@ class Log(object):
             message = self.detect_type(message)
             module_justified = module.ljust(self.maxlength)
             level_justified = level.ljust(7)
+            time = strftime("%H:%M:%S")
 
             if self.display:
-                """
-                print("{0} {1}{2}{3}{4} {5} {6} {7}".format(strftime("%H:%M:%S"),
-                                                            self.colors[self.colors_levels[level]],
-                                                            level_justified.upper(),
-                                                            self.colors['reset'],
-                                                            module_justified,
-                                                            self.colors[self.colors_levels[level]],
-                                                            self.custom_highlight(message, self.colors[self.colors_levels[level]]),
-                                                            self.colors['reset']))
-                """
-
                 print("{0} {1} {2} {3}".format(module_justified,
                                                self.colors[self.colors_levels[level]],
                                                self.custom_highlight(message, self.colors[self.colors_levels[level]]),
@@ -590,7 +580,7 @@ class ADS1299(object):
     def set_srb1(self, state=True):
         # Enable/disable channel
         if state:
-            log.info('Connecting SRB1 to ground')
+            log.info('Setting SRB1 as ground on all channels')
             return self.set_reg('MISC1', 3, 1)
         else:
             log.info('Disconnecting SRB1')
