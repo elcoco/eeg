@@ -65,9 +65,21 @@ class Threads(object):
 
 
 
+class GetDataThread(StoppableThread):
+    def __init__(self, eeg):
+        StoppableThread.__init__(self)
+        self.eeg = eeg
+
+
+    def run(self):
+        while not self.stopped():
+            self.eeg.get_data()
+
+
 class PlotThread(StoppableThread):
     def __init__(self, widget):
         StoppableThread.__init__(self)
+        self.widget = widget
 
 
     def get_timestamp(self):
@@ -76,11 +88,11 @@ class PlotThread(StoppableThread):
 
     def setup(self):
         # Must be set before creating any widgets
-        pg.setConfigOption('background', 0.1)
+        #pg.setConfigOption('background', 0.1)
 
         # Create a grid with multiple items
-        self.win = pg.GraphicsWindow()
-        self.win.setWindowTitle('EEG')
+        #self.win = pg.GraphicsWindow()
+        #self.win.setWindowTitle('EEG')
 
         # use dict instead of list because using index for channel is complicated
 
@@ -105,7 +117,7 @@ class PlotThread(StoppableThread):
         # Setup plots and curves fill their contents with empty numpy arrays
         for i in range(0, self.n_plots):
             if config.get('channel' + str(i+1), 'state') == 'on':
-                p = self.win.addPlot(row=i,col=1)
+                p = self.widget.addPlot(row=i,col=1)
                 p.setRange(xRange=[-buffer_size, 0])
                 p.setLimits(xMax=0)
                 p.setClipToView(True)
@@ -241,7 +253,7 @@ class PlotThread(StoppableThread):
     def run(self):
         self.setup()
 
-        timer = pg.QtCore.QTimer()
+        timer = win.QtCore.QTimer()
         timer.timeout.connect(self.update)
         timer.start(100)
 
@@ -280,6 +292,15 @@ class MainWindow(TemplateBaseClass):
         self.ui.comboBox_ch6_gain.activated.connect(self.channel6_gain)
         self.ui.comboBox_ch7_gain.activated.connect(self.channel7_gain)
         self.ui.comboBox_ch8_gain.activated.connect(self.channel8_gain)
+
+        self.ui.checkBox_ch1_visible.stateChanged.connect(self.channel1_visible)
+        self.ui.checkBox_ch2_visible.stateChanged.connect(self.channel2_visible)
+        self.ui.checkBox_ch3_visible.stateChanged.connect(self.channel3_visible)
+        self.ui.checkBox_ch4_visible.stateChanged.connect(self.channel4_visible)
+        self.ui.checkBox_ch5_visible.stateChanged.connect(self.channel5_visible)
+        self.ui.checkBox_ch6_visible.stateChanged.connect(self.channel6_visible)
+        self.ui.checkBox_ch7_visible.stateChanged.connect(self.channel7_visible)
+        self.ui.checkBox_ch8_visible.stateChanged.connect(self.channel8_visible)
 
         self.ui.actionExit.triggered.connect(QtGui.qApp.quit)
 
@@ -350,6 +371,62 @@ class MainWindow(TemplateBaseClass):
             self.eeg.set_channel(8, state=False)
 
 
+    def channel1_visible(self):
+        if self.ui.checkBox_ch1_visible.isChecked():
+            self.ui.plotCh1.setHidden(False)
+        else:
+            self.ui.plotCh1.setHidden(True)
+
+
+    def channel2_visible(self):
+        if self.ui.checkBox_ch2_visible.isChecked():
+            self.ui.plotCh2.setHidden(False)
+        else:
+            self.ui.plotCh2.setHidden(True)
+
+
+    def channel3_visible(self):
+        if self.ui.checkBox_ch3_visible.isChecked():
+            self.ui.plotCh3.setHidden(False)
+        else:
+            self.ui.plotCh3.setHidden(True)
+
+
+    def channel4_visible(self):
+        if self.ui.checkBox_ch4_visible.isChecked():
+            self.ui.plotCh4.setHidden(False)
+        else:
+            self.ui.plotCh4.setHidden(True)
+
+
+    def channel5_visible(self):
+        if self.ui.checkBox_ch5_visible.isChecked():
+            self.ui.plotCh5.setHidden(False)
+        else:
+            self.ui.plotCh5.setHidden(True)
+
+
+    def channel6_visible(self):
+        if self.ui.checkBox_ch6_visible.isChecked():
+            self.ui.plotCh6.setHidden(False)
+        else:
+            self.ui.plotCh6.setHidden(True)
+
+
+    def channel7_visible(self):
+        if self.ui.checkBox_ch7_visible.isChecked():
+            self.ui.plotCh7.setHidden(False)
+        else:
+            self.ui.plotCh7.setHidden(True)
+
+
+    def channel8_visible(self):
+        if self.ui.checkBox_ch8_visible.isChecked():
+            self.ui.plotCh8.setHidden(False)
+        else:
+            self.ui.plotCh8.setHidden(True)
+
+
     def channel1_gain(self):
         gain = self.ui.comboBox_ch1_gain.currentText()
         self.eeg.set_gain(1, gain)
@@ -393,14 +470,20 @@ class MainWindow(TemplateBaseClass):
         print('start')
         self.connect()
         self.eeg.send_settings()
-        self.ui.plotArea.plot(np.random.normal(size=100), clear=True)
-        #self.plot = PlotThread( self.ui.plotArea.plot(np.random.normal(size=100), clear=True))
+        self.eeg.send_start()
+        self.plot_data_thread = GetDataThread(self.eeg).start()
+        self.ui.plotCh3.plot(np.random.normal(size=100), clear=True)
+        self.ui.plotCh5.plot(np.random.normal(size=100), clear=True)
+        #self.ui.plotArea.addPlot(row=i,col=1)
+        #self.plot = PlotThread(self.ui.plotArea).start()
 
 
     def stop(self):
         print('stop')
+        self.eeg.send_stop()
+        self.plot_data_thread.stop()
         self.eeg.disconnect()
-        #self.threads.stop_thread(QtThread)
+        #self.threads.stop_thread
 
 
     def connect(self):
@@ -414,6 +497,7 @@ class MainWindow(TemplateBaseClass):
         else:
             self.ui.dockWidgetChannelSettings.setHidden(True)
             self.ui.dockWidgetVisibleChannels.setHidden(True)
+
 
 win = MainWindow()
 

@@ -815,6 +815,7 @@ class EEG(object):
     def __init__(self, config):
         self.config = config
         self.ads1299 = ADS1299()
+        self.datalist = DataList()
 
 
     def get_file(self, filename):
@@ -919,7 +920,7 @@ class EEG(object):
                 data = Data(self.config)
                 data.set_channel(channel)
                 data.set_data(d)
-                datalist.add_data(data)
+                self.datalist.add_data(data)
         return True
 
 
@@ -989,6 +990,14 @@ class EEG(object):
                 self.config.set('channel' + str(channel), 'state', 'on')
             else:
                 self.config.set('channel' + str(channel), 'state', 'off')
+
+
+    def send_start(self):
+        self.socket.send('START')
+
+
+    def send_stop(self):
+        self.socket.send('STOP')
 
 
     def usage(self):
