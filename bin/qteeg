@@ -4,7 +4,21 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 import numpy as np
 import os
-from pyeeg import Config as config
+
+from pyeeg import Config
+from pyeeg import EEG
+from pyeeg import Log as log
+
+import threading
+
+import datetime
+import socket
+import select
+import time
+
+import inspect
+import re
+from time import strftime
 
 pg.mkQApp()
 
@@ -13,21 +27,394 @@ path = os.path.dirname(os.path.abspath(__file__))
 uiFile = os.path.join(path, 'qteeg.ui')
 WindowTemplate, TemplateBaseClass = pg.Qt.loadUiType(uiFile)
 
+class StoppableThread(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.stop_flag = threading.Event()
+
+
+    def stop(self):
+        if self.isAlive() == True:
+            self.stop_flag.set()
+
+
+    def stopped(self):
+        return self.stop_flag.is_set()
+
+
+
+class Threads(object):
+    def __init__(self):
+        self.running_threads = []
+
+    def start_threads(self):
+        self.running_threads.append(QtThread().start())
+
+
+    def stop_threads(self):
+        for thread in self.running_threads:
+            thread.stop()
+
+
+    def start_thread(self, thread):
+        self.running_threads.append(thread().start())
+
+
+    def stop_thread(self, thread):
+        thread.stop()
+
+
+
+class PlotThread(StoppableThread):
+    def __init__(self, widget):
+        StoppableThread.__init__(self)
+
+
+    def get_timestamp(self):
+        return datetime.datetime.today()
+
+
+    def setup(self):
+        # Must be set before creating any widgets
+        pg.setConfigOption('background', 0.1)
+
+        # Create a grid with multiple items
+        self.win = pg.GraphicsWindow()
+        self.win.setWindowTitle('EEG')
+
+        # use dict instead of list because using index for channel is complicated
+
+        # Vars to keep track of frames and location of frames
+        self.plots = []
+        self.curves = []
+        self.fbs_y = []                     # Stores numpy data arrays (buffers) containing the full data buffer
+        self.fbs_x = []                     # Stores numpy data arrays (buffers) containing the full data buffer
+        self.framecount = [0,0,0,0,0,0,0,0] # Stores the number of frames for every channel so we can check if it fits in the buffer
+        self.last_frames = {}               # last_frames is the  dict that stores the last fetched frame by channel
+        self.running = False                # Make sure only one verion of update() is running
+
+        self.fps = [False,False,False,False,False,False,False,False]        # Keep track of FPS
+        self.fps_frames_count = [0,0,0,0,0,0,0,0]
+        self.fps_t_interval = 1         # The timespan over which the FPS is calculated in seconds
+        self.fps_t_start = [False,False,False,False,False,False,False,False]
+        self.fps_t_end = [False,False,False,False,False,False,False,False]
+
+        buffer_size = 1000              # Initial buffer size
+        self.n_plots = 8                # Number of plots(channels)
+
+        # Setup plots and curves fill their contents with empty numpy arrays
+        for i in range(0, self.n_plots):
+            if config.get('channel' + str(i+1), 'state') == 'on':
+                p = self.win.addPlot(row=i,col=1)
+                p.setRange(xRange=[-buffer_size, 0])
+                p.setLimits(xMax=0)
+                p.setClipToView(True)
+                p.setDownsampling(mode='peak')
+                p.showGrid(x=True, y=True)
+
+                curve = p.plot(pen=i)
+                data = np.empty(1)
+
+                self.plots.append(p)
+                self.curves.append(curve)
+                self.fbs_y.append(data)
+                self.fbs_x.append(data)
+
+
+    def update_channel(self, channel, ys, xs):
+        # TODO Overflow errors must have something to do with the size of the buffer
+        # lists start with zero
+        channel = channel - 1
+
+        # Short names are good!
+        framecount = self.framecount[channel]
+        fb_y = self.fbs_y[channel]
+        fb_x = self.fbs_x[channel]
+        curve = self.curves[channel]
+
+        # Combine the old buffer and the new data
+        fb_y = np.append(fb_y, ys)
+        fb_x = np.append(fb_x, xs)
+
+        # update the framecount with the new data (numpy array length is fetched with data.shape[0]
+        framecount += ys.shape[0]
+
+        # If the length of data is bigger than the buffer, we have to enlarge the buffer
+        #log.info('>>> Framecount: {0}, len fb_y {1}'.format(framecount, fb_y.shape[0]))
+        if int(framecount) >= int(fb_y.shape[0]):
+            log.info('>>> we have to enlarge buffer: {0} >= {1}'.format(framecount, fb_y.shape[0]))
+
+            # Backup old bufer
+            tmp_y = fb_y[:]
+            tmp_x = fb_x[:]
+            
+            # Create new buffer, double the size of the old one
+            fb_y = np.empty(fb_y.shape[0] + fb_y.shape(0) + 10)
+            fb_x = np.empty(fb_x.shape[0] + fb_x.shape(0) + 10)
+
+            # Copy the buffer back to the first half of the new, bigger buffer
+            fb_y[:tmp_y.shape[0]] = tmp_y
+            fb_x[:tmp_x.shape[0]] = tmp_x
+
+        # Update pyqtgraph with the first half (new) of the buffer
+        #curve.setData(fb_y[:framecount], fb_x[:framecount])
+        curve.setData(fb_y[:framecount])
+        curve.setPos(-framecount, 0)
+
+        fps = self.calculate_fps(channel, len(ys))
+        if fps:
+            self.plots[channel].setTitle('Channel {0} - FPS {1:.0f}'.format(channel, self.fps[channel]))
+
+        # TODO limit displayed channels to configured channels
+        self.framecount[channel] = framecount
+        # Move buffers back to globals
+        self.fbs_y[channel] = fb_y[:]
+        self.fbs_x[channel] = fb_x[:]
+        self.curves[channel] = curve
+
+
+    def update(self):
+        # Make sure only one version of this method is running
+        if self.running: return
+        self.running = True
+
+        for channel in range(1, 9):
+            if config.get('channel' + str(channel), 'state') == 'on':
+
+                # Set default values for last_items
+                # last_frames is the  dict that stores the last fetched frame by channel
+                if channel not in self.last_frames.keys():
+                    self.last_frames[channel] = False
+
+                # Retrieve list of objects newer than last_item (which is the Data() object that was last)
+                datas = datalist.get_last_items(channel, self.last_frames[channel])
+
+                if datas:
+                    # remove first lot of frames if it is the first go, this should be changed obviously
+                    if not self.last_frames[channel]:
+                        datas = datas[-1:]
+
+                    # Set last received frame in self.last_frames
+                    self.last_frames[channel] = datas[-1]
+
+                    ys = []
+                    xs = []
+                    for data in datas:
+                        ys.append(int(data.get_data()))
+                        d = data.get_timestamp()
+                        xs.append(int('{0}{1}{2}'.format(d.hour, d.minute, d.second)))
+
+                    # Update the graph with the new data, provide -> channel, chunk of data, last state, current state
+                    self.update_channel( channel, np.array(ys), np.array(xs))
+
+
+        # TODO change this (just add up all the individuals fps
+        # Set the plot tile if it was changed
+        #if self.calculate_fps(self.fps_tfc):
+        #    self.plots[0].setTitle('FPS %s03'%self.fps)
+        self.running = False
+
+
+    def calculate_fps(self, channel, n_frames):
+        # Stores frames and time elapsed and updates when t_update has passed
+        # List start at 0
+        if not self.fps_t_start[channel]:
+            self.fps_t_start[channel] = self.get_timestamp()
+
+        t_current = self.get_timestamp()
+        t_elapsed = (t_current - self.fps_t_start[channel]).total_seconds()
+
+        if t_elapsed <= self.fps_t_interval:
+            # update time not reached yet
+            self.fps_frames_count[channel] += n_frames
+            return False
+        else:
+            # update time has been reached --> change self.fps
+            self.fps[channel] = self.fps_frames_count[channel] / t_elapsed
+
+            # Reset variables
+            self.fps_t_start[channel] = self.get_timestamp()
+            self.fps_frames_count[channel] = 0
+            return self.fps[channel]
+
+
+    def run(self):
+        self.setup()
+
+        timer = pg.QtCore.QTimer()
+        timer.timeout.connect(self.update)
+        timer.start(100)
+
+
+
 class MainWindow(TemplateBaseClass):  
     def __init__(self):
         TemplateBaseClass.__init__(self)
         self.setWindowTitle('pyqtgraph example: Qt Designer')
         
+        self.threads = Threads()
+        global config
+        config = Config()
+        self.eeg = EEG(config)
+        self.eeg.set_config_defaults()
+        self.eeg.set_srb1()
+        self.eeg.set_ref()
+        
         # Create the main window
         self.ui = WindowTemplate()
         self.ui.setupUi(self)
-        self.ui.checkBox_ch1_enabled.stateChanged.connect(self.plot)
+        self.ui.checkBox_ch1_enabled.stateChanged.connect(self.channel1_toggle)
+        self.ui.checkBox_ch2_enabled.stateChanged.connect(self.channel2_toggle)
+        self.ui.checkBox_ch3_enabled.stateChanged.connect(self.channel3_toggle)
+        self.ui.checkBox_ch4_enabled.stateChanged.connect(self.channel4_toggle)
+        self.ui.checkBox_ch5_enabled.stateChanged.connect(self.channel5_toggle)
+        self.ui.checkBox_ch6_enabled.stateChanged.connect(self.channel6_toggle)
+        self.ui.checkBox_ch7_enabled.stateChanged.connect(self.channel7_toggle)
+        self.ui.checkBox_ch8_enabled.stateChanged.connect(self.channel8_toggle)
+
+        self.ui.comboBox_ch1_gain.activated.connect(self.channel1_gain)
+        self.ui.comboBox_ch2_gain.activated.connect(self.channel2_gain)
+        self.ui.comboBox_ch3_gain.activated.connect(self.channel3_gain)
+        self.ui.comboBox_ch4_gain.activated.connect(self.channel4_gain)
+        self.ui.comboBox_ch5_gain.activated.connect(self.channel5_gain)
+        self.ui.comboBox_ch6_gain.activated.connect(self.channel6_gain)
+        self.ui.comboBox_ch7_gain.activated.connect(self.channel7_gain)
+        self.ui.comboBox_ch8_gain.activated.connect(self.channel8_gain)
+
+        self.ui.actionExit.triggered.connect(QtGui.qApp.quit)
+
+        self.ui.actionStart.triggered.connect(self.start)
+        self.ui.actionStop.triggered.connect(self.stop)
+        self.ui.actionConnect.triggered.connect(self.connect)
+        self.ui.actionToggleSidebar.triggered.connect(self.toggle_sidebar)
+
         self.show()
         
+
     def plot(self):
-        print('blabla')
-        #self.ui.plot.plot(np.random.normal(size=100), clear=True)
-        
+        self.ui.plot.plot(np.random.normal(size=100), clear=True)
+
+    def channel1_toggle(self):
+        if self.ui.checkBox_ch1_enabled.isChecked():
+            self.eeg.set_channel(1)
+        else:
+            self.eeg.set_channel(1, state=False)
+
+
+    def channel2_toggle(self):
+        if self.ui.checkBox_ch2_enabled.isChecked():
+            self.eeg.set_channel(2)
+        else:
+            self.eeg.set_channel(2, state=False)
+
+
+    def channel3_toggle(self):
+        if self.ui.checkBox_ch3_enabled.isChecked():
+            self.eeg.set_channel(3)
+        else:
+            self.eeg.set_channel(3, state=False)
+
+
+    def channel4_toggle(self):
+        if self.ui.checkBox_ch4_enabled.isChecked():
+            self.eeg.set_channel(4)
+        else:
+            self.eeg.set_channel(4, state=False)
+
+
+    def channel5_toggle(self):
+        if self.ui.checkBox_ch5_enabled.isChecked():
+            self.eeg.set_channel(5)
+        else:
+            self.eeg.set_channel(5, state=False)
+
+
+    def channel6_toggle(self):
+        if self.ui.checkBox_ch6_enabled.isChecked():
+            self.eeg.set_channel(6)
+        else:
+            self.eeg.set_channel(6, state=False)
+
+
+    def channel7_toggle(self):
+        if self.ui.checkBox_ch7_enabled.isChecked():
+            self.eeg.set_channel(7)
+        else:
+            self.eeg.set_channel(7, state=False)
+
+
+    def channel8_toggle(self):
+        if self.ui.checkBox_ch1_enabled.isChecked():
+            self.eeg.set_channel(8)
+        else:
+            self.eeg.set_channel(8, state=False)
+
+
+    def channel1_gain(self):
+        gain = self.ui.comboBox_ch1_gain.currentText()
+        self.eeg.set_gain(1, gain)
+
+
+    def channel2_gain(self):
+        gain = self.ui.comboBox_ch2_gain.currentText()
+        self.eeg.set_gain(2, gain)
+
+    def channel3_gain(self):
+        gain = self.ui.comboBox_ch3_gain.currentText()
+        self.eeg.set_gain(3, gain)
+
+
+    def channel4_gain(self):
+        gain = self.ui.comboBox_ch4_gain.currentText()
+        self.eeg.set_gain(4, gain)
+
+
+    def channel5_gain(self):
+        gain = self.ui.comboBox_ch5_gain.currentText()
+        self.eeg.set_gain(5, gain)
+
+
+    def channel6_gain(self):
+        gain = self.ui.comboBox_ch6_gain.currentText()
+        self.eeg.set_gain(6, gain)
+
+
+    def channel7_gain(self):
+        gain = self.ui.comboBox_ch7_gain.currentText()
+        self.eeg.set_gain(7, gain)
+
+
+    def channel8_gain(self):
+        gain = self.ui.comboBox_ch8_gain.currentText()
+        self.eeg.set_gain(8, gain)
+
+
+    def start(self):
+        print('start')
+        self.connect()
+        self.eeg.send_settings()
+        self.ui.plotArea.plot(np.random.normal(size=100), clear=True)
+        #self.plot = PlotThread( self.ui.plotArea.plot(np.random.normal(size=100), clear=True))
+
+
+    def stop(self):
+        print('stop')
+        self.eeg.disconnect()
+        #self.threads.stop_thread(QtThread)
+
+
+    def connect(self):
+        self.eeg.connect()
+
+
+    def toggle_sidebar(self):
+        if self.ui.dockWidgetChannelSettings.isHidden():
+            self.ui.dockWidgetChannelSettings.setHidden(False)
+            self.ui.dockWidgetVisibleChannels.setHidden(False)
+        else:
+            self.ui.dockWidgetChannelSettings.setHidden(True)
+            self.ui.dockWidgetVisibleChannels.setHidden(True)
+
 win = MainWindow()
 
 

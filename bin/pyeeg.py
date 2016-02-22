@@ -553,6 +553,14 @@ class ADS1299(object):
         return '0x{:02x}'.format(self.registers[reg]), hex(int(''.join(self.values[reg]),2))
 
 
+    def get_all_regs(self):
+        return_list = []
+        for reg in self.registers:
+            return_list.append(self.get_reg(reg))
+        return return_list
+
+
+
     def get_reg_bak(self, reg):
         ret_reg = hex(self.registers[reg])
         v= ''.join(self.values[reg])
@@ -614,12 +622,13 @@ class ADS1299(object):
 
 
 class Data(object):
-    def __init__(self):
+    def __init__(self, config):
         # TODO: create a method to create a filename with date_increasing number
         self.channel = False
         self.data = False
         self.loff_p = True
         self.loff_n = True
+        self.config = config
         #self.timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")
         self.timestamp = datetime.datetime.today()
 
@@ -638,10 +647,10 @@ class Data(object):
     def create_file(self):
         """ Create a file if it doesn't exist """
         try:
-            with open(config.get('log', 'path')) as f: pass
+            with open(self.config.get('log', 'path')) as f: pass
         except IOError as e:
             try:
-                FILE = open(config.get('log', 'path'), 'w')
+                FILE = open(self.config.get('log', 'path'), 'w')
                 FILE.close()
             except IOError as e:
                 log.error('WARNING ... Couldn\'t create file \'%s\''%self.write_path)
@@ -653,7 +662,7 @@ class Data(object):
         """ Write data to file """
         if self.create_file():
             try:
-                FILE = open(config.get('log', 'path'), 'a')
+                FILE = open(self.config.get('log', 'path'), 'a')
                 #FILE.write("{0}|{1}|{2}\n".format(self.get_timestamp(), \
                 #                                  self.get_channel(), \
                 #                                  self.get_data()))
@@ -759,6 +768,10 @@ class Socket(object):
 
     def sanitize(self, data):
         return data.strip('\n')
+
+
+    def close(self):
+        self.socket.close()
         
 
 
@@ -798,191 +811,12 @@ class PlotThread(StoppableThread):
 
 
 
-class QtThread(StoppableThread):
-    def __init__(self):
-        StoppableThread.__init__(self)
-
-
-    def get_timestamp(self):
-        return datetime.datetime.today()
-
-
-    def setup(self):
-        # Must be set before creating any widgets
-        pg.setConfigOption('background', 0.1)
-
-        # Create a grid with multiple items
-        self.win = pg.GraphicsWindow()
-        self.win.setWindowTitle('EEG')
-
-        # use dict instead of list because using index for channel is complicated
-
-        # Vars to keep track of frames and location of frames
-        self.plots = []
-        self.curves = []
-        self.fbs_y = []                     # Stores numpy data arrays (buffers) containing the full data buffer
-        self.fbs_x = []                     # Stores numpy data arrays (buffers) containing the full data buffer
-        self.framecount = [0,0,0,0,0,0,0,0] # Stores the number of frames for every channel so we can check if it fits in the buffer
-        self.last_frames = {}               # last_frames is the  dict that stores the last fetched frame by channel
-        self.running = False                # Make sure only one verion of update() is running
-
-        self.fps = [False,False,False,False,False,False,False,False]        # Keep track of FPS
-        self.fps_frames_count = [0,0,0,0,0,0,0,0]
-        self.fps_t_interval = 1         # The timespan over which the FPS is calculated in seconds
-        self.fps_t_start = [False,False,False,False,False,False,False,False]
-        self.fps_t_end = [False,False,False,False,False,False,False,False]
-
-        buffer_size = 1000              # Initial buffer size
-        self.n_plots = 8                # Number of plots(channels)
-
-        # Setup plots and curves fill their contents with empty numpy arrays
-        for i in range(0, self.n_plots):
-            if config.get('channel' + str(i+1), 'state') == 'on':
-                p = self.win.addPlot(row=i,col=1)
-                p.setRange(xRange=[-buffer_size, 0])
-                p.setLimits(xMax=0)
-                p.setClipToView(True)
-                p.setDownsampling(mode='peak')
-                p.showGrid(x=True, y=True)
-
-                curve = p.plot(pen=i)
-                data = np.empty(1)
-
-                self.plots.append(p)
-                self.curves.append(curve)
-                self.fbs_y.append(data)
-                self.fbs_x.append(data)
-
-
-    def update_channel(self, channel, ys, xs):
-        # TODO Overflow errors must have something to do with the size of the buffer
-        # lists start with zero
-        channel = channel - 1
-
-        # Short names are good!
-        framecount = self.framecount[channel]
-        fb_y = self.fbs_y[channel]
-        fb_x = self.fbs_x[channel]
-        curve = self.curves[channel]
-
-        # Combine the old buffer and the new data
-        fb_y = np.append(fb_y, ys)
-        fb_x = np.append(fb_x, xs)
-
-        # update the framecount with the new data (numpy array length is fetched with data.shape[0]
-        framecount += ys.shape[0]
-
-        # If the length of data is bigger than the buffer, we have to enlarge the buffer
-        #log.info('>>> Framecount: {0}, len fb_y {1}'.format(framecount, fb_y.shape[0]))
-        if int(framecount) >= int(fb_y.shape[0]):
-            log.info('>>> we have to enlarge buffer: {0} >= {1}'.format(framecount, fb_y.shape[0]))
-
-            # Backup old bufer
-            tmp_y = fb_y[:]
-            tmp_x = fb_x[:]
-            
-            # Create new buffer, double the size of the old one
-            fb_y = np.empty(fb_y.shape[0] + fb_y.shape(0) + 10)
-            fb_x = np.empty(fb_x.shape[0] + fb_x.shape(0) + 10)
-
-            # Copy the buffer back to the first half of the new, bigger buffer
-            fb_y[:tmp_y.shape[0]] = tmp_y
-            fb_x[:tmp_x.shape[0]] = tmp_x
-
-        # Update pyqtgraph with the first half (new) of the buffer
-        #curve.setData(fb_y[:framecount], fb_x[:framecount])
-        curve.setData(fb_y[:framecount])
-        curve.setPos(-framecount, 0)
-
-        fps = self.calculate_fps(channel, len(ys))
-        if fps:
-            self.plots[channel].setTitle('Channel {0} - FPS {1:.0f}'.format(channel, self.fps[channel]))
-
-        # TODO limit displayed channels to configured channels
-        self.framecount[channel] = framecount
-        # Move buffers back to globals
-        self.fbs_y[channel] = fb_y[:]
-        self.fbs_x[channel] = fb_x[:]
-        self.curves[channel] = curve
-
-
-    def update(self):
-        # Make sure only one version of this method is running
-        if self.running: return
-        self.running = True
-
-        for channel in range(1, 9):
-            if config.get('channel' + str(channel), 'state') == 'on':
-
-                # Set default values for last_items
-                # last_frames is the  dict that stores the last fetched frame by channel
-                if channel not in self.last_frames.keys():
-                    self.last_frames[channel] = False
-
-                # Retrieve list of objects newer than last_item (which is the Data() object that was last)
-                datas = datalist.get_last_items(channel, self.last_frames[channel])
-
-                if datas:
-                    # remove first lot of frames if it is the first go, this should be changed obviously
-                    if not self.last_frames[channel]:
-                        datas = datas[-1:]
-
-                    # Set last received frame in self.last_frames
-                    self.last_frames[channel] = datas[-1]
-
-                    ys = []
-                    xs = []
-                    for data in datas:
-                        ys.append(int(data.get_data()))
-                        d = data.get_timestamp()
-                        xs.append(int('{0}{1}{2}'.format(d.hour, d.minute, d.second)))
-
-                    # Update the graph with the new data, provide -> channel, chunk of data, last state, current state
-                    self.update_channel( channel, np.array(ys), np.array(xs))
-
-
-        # TODO change this (just add up all the individuals fps
-        # Set the plot tile if it was changed
-        #if self.calculate_fps(self.fps_tfc):
-        #    self.plots[0].setTitle('FPS %s03'%self.fps)
-        self.running = False
-
-
-    def calculate_fps(self, channel, n_frames):
-        # Stores frames and time elapsed and updates when t_update has passed
-        # List start at 0
-        if not self.fps_t_start[channel]:
-            self.fps_t_start[channel] = self.get_timestamp()
-
-        t_current = self.get_timestamp()
-        t_elapsed = (t_current - self.fps_t_start[channel]).total_seconds()
-
-        if t_elapsed <= self.fps_t_interval:
-            # update time not reached yet
-            self.fps_frames_count[channel] += n_frames
-            return False
-        else:
-            # update time has been reached --> change self.fps
-            self.fps[channel] = self.fps_frames_count[channel] / t_elapsed
-
-            # Reset variables
-            self.fps_t_start[channel] = self.get_timestamp()
-            self.fps_frames_count[channel] = 0
-            return self.fps[channel]
-
-
-    def run(self):
-        self.setup()
-
-        timer = pg.QtCore.QTimer()
-        timer.timeout.connect(self.update)
-        timer.start(100)
-
-        QtGui.QApplication.instance().exec_()
-
-
-
 class EEG(object):
+    def __init__(self, config):
+        self.config = config
+        self.ads1299 = ADS1299()
+
+
     def get_file(self, filename):
         """ Get contents of a file and put every line in a list"""
         contents = []
@@ -1004,7 +838,7 @@ class EEG(object):
 
     def start_threads(self):
         self.running_threads = []
-        self.running_threads.append(QtThread().start())
+        self.running_threads.append(QtThread(self.config).start())
 
 
     def stop_threads(self):
@@ -1046,7 +880,7 @@ class EEG(object):
                 log.error('Error getting data, length is corrupted: {0}'.format(length))
 
             # If run-time has reached, send the STOP command to the server
-            if start_time + int(config.get('general', 'run-time')) <= self.get_timestamp():
+            if start_time + int(self.config.get('general', 'run-time')) <= self.get_timestamp():
                 log.info('Run time reached')
                 self.socket.send('STOP')
 
@@ -1078,90 +912,83 @@ class EEG(object):
         # Skip the status bits start at byte 4
         for d in rd[3:11]:
             channel += 1
-            if config.get('channel'+ str(channel), 'state') == 'on':
+            if self.config.get('channel'+ str(channel), 'state') == 'on':
                 if d == 0:
                     log.error('Data is 0')
                     return False
-                data = Data()
+                data = Data(self.config)
                 data.set_channel(channel)
                 data.set_data(d)
                 datalist.add_data(data)
         return True
 
 
-    def send_channel_config(self):
-        # Read Config() and change ADS1299() and send over socket
-        log.info('Sending channel config to server')
-        for channel in range(1, 8+1):
-            if config.get('channel{0}'.format(channel), 'state') == 'on':
-                ads1299.set_channel(channel)
-            else:
-                ads1299.set_channel(channel, state=False)
+    def send_settings(self):
+        for reg in self.ads1299.get_all_regs():
+            self.socket.send('WREG,{0},{1}'.format(reg[0], reg[1]))
 
-            ads1299.set_gain(channel, config.get('channel{0}'.format(channel), 'gain'))
 
-            c, v = ads1299.get_reg('CH{0}SET'.format(str(channel)))
-            self.socket.send('WREG,{0},{1}'.format(c, v))
 
 
     def set_srb1(self, state=True):
         if state:
-            config.set('srb1', 'state', 'ground')
+            self.config.set('srb1', 'state', 'ground')
+            self.ads1299.set_srb1()
             return
         else:
-            config.set('srb1', 'state', 'disconnected')
+            self.config.set('srb1', 'state', 'disconnected')
+            self.ads1299.set_srb1(state=False)
             return
-
-
-    def send_srb1(self):
-        log.info('Sending SRB1 config to server')
-        if config.get('srb1', 'state') == 'ground':
-            ads1299.set_srb1()
-        else:
-            ads1299.set_srb1(state=False)
-
-        self.socket.send('WREG,{0},{1}'.format(ads1299.get_reg('MISC1')[0], ads1299.get_reg('MISC1')[1]))
 
 
     def set_ref(self, state=True):
         if state:
-            config.set('general', 'reference', 'internal')
+            self.config.set('general', 'reference', 'internal')
+            self.ads1299.set_internal_ref()
             return
         else:
-            config.set('general', 'internal', 'external')
+            self.config.set('general', 'internal', 'external')
+            self.ads1299.set_internal_ref(state=False)
             return
 
 
-    def send_ref(self):
-        log.info('Sending reference config to server')
-        if config.get('general', 'reference') == 'internal':
-            ads1299.set_internal_ref()
+    def set_channel(self, channel, state=True):
+        if state:
+            log.info('Channel{0} is on'.format(channel))
+            self.config.set('channel' + str(channel), 'state', 'on')
+            self.ads1299.set_channel(channel)
         else:
-            ads1299.set_internal_ref(state=False)
+            log.info('Channel{0} is off'.format(channel))
+            self.config.set('channel' + str(channel), 'state', 'off')
+            self.ads1299.set_channel(channel, state=False)
 
-        self.socket.send('WREG,{0},{1}'.format(ads1299.get_reg('CONFIG3')[0], ads1299.get_reg('CONFIG3')[1]))
+
+    def set_gain(self, channel, level):
+        log.info('Gain on Channel{0} is set to: {1}'.format(channel, level))
+        self.config.set('channel' + str(channel), 'gain', level)
+        self.ads1299.set_gain(channel, level)
 
 
-    def set_channel(self, channels):
+    def set_gain_old(self, level):
+        level = level.split(',')
+        level = [ int(x) for x in level ]
+        if len(level) == 2:
+            self.config.set('channel' + str(level[0]), 'gain', level[1])
+        elif len(level) == 1:
+            for channel in range(1, 8+1):
+                self.config.set('channel' + str(channel), 'gain', level[0])
+
+
+    def set_channel_old(self, channels):
         # Set channel in Config() and ADS1299()
         channels = channels.split(',')
         channels = [ int(x) for x in channels ]
 
         for channel in range(1, 8+1):
             if channel in channels:
-                config.set('channel' + str(channel), 'state', 'on')
+                self.config.set('channel' + str(channel), 'state', 'on')
             else:
-                config.set('channel' + str(channel), 'state', 'off')
-
-
-    def set_gain(self, level):
-        level = level.split(',')
-        level = [ int(x) for x in level ]
-        if len(level) == 2:
-            config.set('channel' + str(level[0]), 'gain', level[1])
-        elif len(level) == 1:
-            for channel in range(1, 8+1):
-                config.set('channel' + str(channel), 'gain', level[0])
+                self.config.set('channel' + str(channel), 'state', 'off')
 
 
     def usage(self):
@@ -1180,29 +1007,29 @@ class EEG(object):
 
 
     def set_config_defaults(self):
-        config.set('server', 'address', 'alarmpi')
-        config.set('server', 'port', '8888')
-        config.set('general', 'length-size', '3')
-        config.set('general', 'run-time', '60')
-        config.set('general', 'reference', 'internal')
-        config.set('channel1', 'state', 'on')
-        config.set('channel2', 'state', 'on')
-        config.set('channel3', 'state', 'on')
-        config.set('channel4', 'state', 'on')
-        config.set('channel5', 'state', 'on')
-        config.set('channel6', 'state', 'on')
-        config.set('channel7', 'state', 'on')
-        config.set('channel8', 'state', 'on')
-        config.set('channel1', 'gain', '24')
-        config.set('channel2', 'gain', '24')
-        config.set('channel3', 'gain', '24')
-        config.set('channel4', 'gain', '24')
-        config.set('channel5', 'gain', '24')
-        config.set('channel6', 'gain', '24')
-        config.set('channel7', 'gain', '24')
-        config.set('channel8', 'gain', '24')
-        config.set('srb1',     'state','ground')
-        config.set('log', 'path', '/home/eco/eeg.txt')
+        self.config.set('server', 'address', 'alarmpi')
+        self.config.set('server', 'port', '8888')
+        self.config.set('general', 'length-size', '3')
+        self.config.set('general', 'run-time', '60')
+        self.config.set('general', 'reference', 'internal')
+        self.config.set('channel1', 'state', 'on')
+        self.config.set('channel2', 'state', 'on')
+        self.config.set('channel3', 'state', 'on')
+        self.config.set('channel4', 'state', 'on')
+        self.config.set('channel5', 'state', 'on')
+        self.config.set('channel6', 'state', 'on')
+        self.config.set('channel7', 'state', 'on')
+        self.config.set('channel8', 'state', 'on')
+        self.config.set('channel1', 'gain', '24')
+        self.config.set('channel2', 'gain', '24')
+        self.config.set('channel3', 'gain', '24')
+        self.config.set('channel4', 'gain', '24')
+        self.config.set('channel5', 'gain', '24')
+        self.config.set('channel6', 'gain', '24')
+        self.config.set('channel7', 'gain', '24')
+        self.config.set('channel8', 'gain', '24')
+        self.config.set('srb1',     'state','ground')
+        self.config.set('log', 'path', '/home/eco/eeg.txt')
 
 
     def handle_arg(self):
@@ -1217,13 +1044,13 @@ class EEG(object):
                 value = arg.split('=')[1]
 
                 if '--run-time=' in arg:
-                    config.set('general', key, value)
+                    self.config.set('general', key, value)
 
                 elif '--address=' in arg:
-                    config.set('server', key, value)
+                    self.config.set('server', key, value)
 
                 elif '--port=' in arg:
-                    config.set('server', key, value)
+                    self.config.set('server', key, value)
 
                 elif '--channels=' in arg:
                     self.set_channel(value)
@@ -1256,12 +1083,22 @@ class EEG(object):
         return False
 
 
+    def connect(self):
+        # Create socket
+        self.socket = Socket(self.config.get('server', 'address'), self.config.get('server', 'port'))
+
+
+    def disconnect(self):
+        # Close
+        log.info('Connection to server is closed')
+        self.socket.close()
+
+
+        
     def run(self):
         self.set_config_defaults()
+        self.connect_to_server()
 
-        # Create socket
-        self.socket = Socket(config.get('server', 'address'), config.get('server', 'port'))
-        
         # Set some defaults
         self.set_srb1()
         self.send_srb1()
@@ -1269,7 +1106,9 @@ class EEG(object):
         self.send_ref()
 
         self.handle_arg()
+        self.disconnect()
 
+log = Log()
 
 
 if __name__ == "__main__":
@@ -1282,5 +1121,5 @@ if __name__ == "__main__":
     log.color('###', 'red')
     log.color('---', 'blue')
 
-    app = EEG()
+    app = EEG(config)
     app.run()

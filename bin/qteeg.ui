@@ -16,12 +16,12 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="horizontalLayout">
     <item>
-     <widget class="PlotWidget" name="graphicsView"/>
+     <widget class="PlotWidget" name="plotArea"/>
     </item>
    </layout>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
-  <widget class="QDockWidget" name="dockWidget">
+  <widget class="QDockWidget" name="dockWidgetChannelSettings">
    <property name="minimumSize">
     <size>
      <width>178</width>
@@ -639,11 +639,12 @@
    <attribute name="toolBarBreak">
     <bool>false</bool>
    </attribute>
+   <addaction name="actionConnect"/>
    <addaction name="actionStart"/>
    <addaction name="actionStop"/>
-   <addaction name="actionToggle_sidebar"/>
+   <addaction name="actionToggleSidebar"/>
   </widget>
-  <widget class="QDockWidget" name="dockWidget_2">
+  <widget class="QDockWidget" name="dockWidgetVisibleChannels">
    <attribute name="dockWidgetArea">
     <number>1</number>
    </attribute>
@@ -658,7 +659,7 @@
         <property name="geometry">
          <rect>
           <x>0</x>
-          <y>-58</y>
+          <y>0</y>
           <width>140</width>
           <height>243</height>
          </rect>
@@ -748,9 +749,22 @@
     <string>Stop</string>
    </property>
   </action>
-  <action name="actionToggle_sidebar">
+  <action name="actionToggleSidebar">
    <property name="text">
-    <string>Toggle sidebar</string>
+    <string>Toggle Sidebar</string>
+   </property>
+  </action>
+  <action name="actionConnect">
+   <property name="text">
+    <string>Connect</string>
+   </property>
+  </action>
+  <action name="actionExit">
+   <property name="text">
+    <string>Exit</string>
+   </property>
+   <property name="toolTip">
+    <string>exit</string>
    </property>
   </action>
  </widget>
@@ -762,5 +776,22 @@
   </customwidget>
  </customwidgets>
  <resources/>
- <connections/>
+ <connections>
+  <connection>
+   <sender>actionExit</sender>
+   <signal>activated()</signal>
+   <receiver>MainWindow</receiver>
+   <slot>close()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>399</x>
+     <y>299</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
 </ui>
