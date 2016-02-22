@@ -812,10 +812,10 @@ class PlotThread(StoppableThread):
 
 
 class EEG(object):
-    def __init__(self, config):
+    def __init__(self, config, datalist):
         self.config = config
         self.ads1299 = ADS1299()
-        self.datalist = DataList()
+        self.datalist = datalist
 
 
     def get_file(self, filename):
@@ -880,19 +880,20 @@ class EEG(object):
             else:
                 log.error('Error getting data, length is corrupted: {0}'.format(length))
 
-            # If run-time has reached, send the STOP command to the server
-            if start_time + int(self.config.get('general', 'run-time')) <= self.get_timestamp():
-                log.info('Run time reached')
-                self.socket.send('STOP')
+            if self.config.get('general', 'run-time') != -1:
+                # If run-time has reached, send the STOP command to the server
+                if start_time + int(self.config.get('general', 'run-time')) <= self.get_timestamp():
+                    log.info('Run time reached')
+                    self.socket.send('STOP')
 
-                log.info("Total frames: {0}".format(total_frames))
-                log.info("Total time (s): {0}".format(self.get_timestamp() - start_time))
-                log.info("FPS: {0}".format(total_frames / (self.get_timestamp() - start_time)))
-                log.info("Skipped chars: {0}".format(skipped))
+                    log.info("Total frames: {0}".format(total_frames))
+                    log.info("Total time (s): {0}".format(self.get_timestamp() - start_time))
+                    log.info("FPS: {0}".format(total_frames / (self.get_timestamp() - start_time)))
+                    log.info("Skipped chars: {0}".format(skipped))
 
-                # TODO: receive total frames sent from server and calculate dropped packages
-                # TODO: Packet timing is important since we want to do spectrum analysis
-                return True
+                    # TODO: receive total frames sent from server and calculate dropped packages
+                    # TODO: Packet timing is important since we want to do spectrum analysis
+                    return True
 
         log.error('An error occured while transfer')
         return False
@@ -1019,7 +1020,7 @@ class EEG(object):
         self.config.set('server', 'address', 'alarmpi')
         self.config.set('server', 'port', '8888')
         self.config.set('general', 'length-size', '3')
-        self.config.set('general', 'run-time', '60')
+        self.config.set('general', 'run-time', '-1')
         self.config.set('general', 'reference', 'internal')
         self.config.set('channel1', 'state', 'on')
         self.config.set('channel2', 'state', 'on')

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>729</width>
-    <height>600</height>
+    <width>772</width>
+    <height>648</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -701,9 +701,9 @@
         <property name="geometry">
          <rect>
           <x>0</x>
-          <y>-74</y>
-          <width>140</width>
-          <height>243</height>
+          <y>-79</y>
+          <width>153</width>
+          <height>272</height>
          </rect>
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_11">
@@ -798,6 +798,76 @@
            </item>
           </layout>
          </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_11">
+           <item>
+            <widget class="QComboBox" name="comboBoxRefresh">
+             <item>
+              <property name="text">
+               <string>0.05</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>0.10</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>0.20</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>0.30</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>0.40</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>0.50</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>0.60</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>0.70</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>0.80</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>0.90</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>1.00</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_10">
+             <property name="text">
+              <string>Refresh</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
         </layout>
        </widget>
       </widget>
@@ -806,6 +876,9 @@
    </widget>
   </widget>
   <action name="actionStart">
+   <property name="icon">
+    <iconset theme="QStyle.SP_MediaPlay"/>
+   </property>
    <property name="text">
     <string>Start</string>
    </property>
@@ -831,6 +904,11 @@
    </property>
    <property name="toolTip">
     <string>exit</string>
+   </property>
+  </action>
+  <action name="actionStatusText">
+   <property name="text">
+    <string> </string>
    </property>
   </action>
  </widget>
