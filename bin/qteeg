@@ -29,60 +29,25 @@ uiFile = os.path.join(path, 'qteeg.ui')
 WindowTemplate, TemplateBaseClass = pg.Qt.loadUiType(uiFile)
 
 
-class StoppableThread(threading.Thread):
-    def __init__(self):
-        threading.Thread.__init__(self)
-        self.stop_flag = threading.Event()
+class GetDataThread(QtCore.QThread):
+    def __init__(self, eeg):
+        QtCore.QThread.__init__(self)
+        self.eeg = eeg
+        self.stopped = False
 
 
     def stop(self):
-        if self.isAlive() == True:
-            self.stop_flag.set()
-
-
-    def stopped(self):
-        return self.stop_flag.is_set()
-
-
-
-class Threads(object):
-    def __init__(self):
-        self.running_threads = []
-
-    def start_threads(self):
-        self.running_threads.append(QtThread().start())
-
-
-    def stop_threads(self):
-        for thread in self.running_threads:
-            thread.stop()
-
-
-    def start_thread(self, thread):
-        self.running_threads.append(thread().start())
-
-
-    def stop_thread(self, thread):
-        thread.stop()
-
-
-
-class GetDataThread(StoppableThread):
-    def __init__(self, eeg):
-        StoppableThread.__init__(self)
-        self.eeg = eeg
+        print('Stopped received in datathread')
+        self.stopped = True
 
 
     def run(self):
-        while not self.stopped():
+        while not self.stopped:
             self.eeg.get_data()
 
 
-
-class PlotThread(StoppableThread):
-    def __init__(self, channel, widget, datalist):
-        StoppableThread.__init__(self)
-        self.w = widget
+class UpdatePlot(object):
+    def __init__(self, channel, datalist):
         self.channel = channel
         self.datalist = datalist
 
@@ -92,9 +57,209 @@ class PlotThread(StoppableThread):
 
 
     def setup(self):
-        # Must be set before creating any widgets
-        pg.setConfigOption('background', 0.1)
+        # Vars to keep track of frames and location of frames
+        self.framecount = 0             # Stores the number of frames for every channel so we can check if it fits in the buffer
+        self.last_frame = False        # last_frames is the  dict that stores the last fetched frame by channel
+        self.running = False            # Make sure only one verion of update() is running
 
+        self.fps = False                # Keep track of FPS
+        self.fps_frames_count = 0
+        self.fps_t_interval = 1         # The timespan over which the FPS is calculated in seconds
+        self.fps_t_start = False
+        self.fps_t_end = False
+
+        buffer_size = 1000              # Initial buffer size
+
+        # fill buffer with empty numpy array
+        data = np.empty(1)
+
+        self.fb_y = data
+        self.fb_x = data
+
+
+    def update(self):
+        # Make sure only one version of this method is running
+        if self.running: return
+        self.running = True
+
+        # Retrieve list of objects newer than last_item (which is the Data() object that was last)
+        datas = self.datalist.get_last_items(self.channel, self.last_frame)
+
+        if datas:
+            # remove first lot of frames if it is the first go, this should be changed obviously
+            if not self.last_frame:
+                datas = datas[-1:]
+
+            # Set last received frame in self.last_frames
+            self.last_frame = datas[-1]
+
+            ys = []
+            xs = []
+
+            for data in datas:
+                ys.append(int(data.get_data()))
+                d = data.get_timestamp()
+                xs.append(int('{0}{1}{2}'.format(d.hour, d.minute, d.second)))
+
+            # Update the graph with the new data, provide -> channel, chunk of data, last state, current state
+            self.running = False
+
+            ys = np.array(ys)
+            xs = np.array(xs)
+
+            # Combine the old buffer and the new data
+            self.fb_y = np.append(self.fb_y, ys)
+            self.fb_x = np.append(self.fb_x, xs)
+
+            # update the framecount with the new data (numpy array length is fetched with data.shape[0]
+            self.framecount += ys.shape[0]
+
+            #fps = self.calculate_fps(len(ys))
+            #if fps:
+            #    self.w.setTitle('Channel {0} - FPS {1:.0f}'.format(channel, self.fps))
+
+            return self.fb_y[:self.framecount], -self.framecount
+
+        self.running = False
+
+
+    def calculate_fps(self, n_frames):
+        # Stores frames and time elapsed and updates when t_update has passed
+        # List start at 0
+        if not self.fps_t_start:
+            self.fps_t_start = self.get_timestamp()
+
+        t_current = self.get_timestamp()
+        t_elapsed = (t_current - self.fps_t_start).total_seconds()
+
+        if t_elapsed <= self.fps_t_interval:
+            # update time not reached yet
+            self.fps_frames_count += n_frames
+            return False
+        else:
+            # update time has been reached --> change self.fps
+            self.fps = self.fps_frames_count / t_elapsed
+
+            # Reset variables
+            self.fps_t_start = self.get_timestamp()
+            self.fps_frames_count = 0
+            return self.fps
+
+
+
+class PlotThread(QtCore.QThread):
+    signals_update = {}
+    signals_position = {}
+
+    sig_update_plot1 = QtCore.pyqtSignal(object)
+    sig_update_plot2 = QtCore.pyqtSignal(object)
+    sig_update_plot3 = QtCore.pyqtSignal(object)
+    sig_update_plot4 = QtCore.pyqtSignal(object)
+    sig_update_plot5 = QtCore.pyqtSignal(object)
+    sig_update_plot6 = QtCore.pyqtSignal(object)
+    sig_update_plot7 = QtCore.pyqtSignal(object)
+    sig_update_plot8 = QtCore.pyqtSignal(object)
+    sig_update_position1 = QtCore.pyqtSignal(object)
+    sig_update_position2 = QtCore.pyqtSignal(object)
+    sig_update_position3 = QtCore.pyqtSignal(object)
+    sig_update_position4 = QtCore.pyqtSignal(object)
+    sig_update_position5 = QtCore.pyqtSignal(object)
+    sig_update_position6 = QtCore.pyqtSignal(object)
+    sig_update_position7 = QtCore.pyqtSignal(object)
+    sig_update_position8 = QtCore.pyqtSignal(object)
+
+
+    def __init__(self, datalist):
+        QtCore.QThread.__init__(self)
+        self.plots = {}
+        self.stopped = False
+
+        # Create all plot update objects and put them in dict
+        for channel in range(1,8+1):
+            if config.get('channel{0}'.format(channel), 'state') == 'on':
+                plot = UpdatePlot(channel, datalist)
+                plot.setup()
+                self.plots[channel] = plot
+
+    def send(self, sig, data):
+        sig.emit(data)
+
+
+    def update(self):
+        if config.get('channel1', 'state') == 'on':
+            retval = self.plots[1].update()
+            if retval:
+                self.send(self.sig_update_plot1, retval[0])
+                self.send(self.sig_update_position1, retval[1])
+        if config.get('channel2', 'state') == 'on':
+            retval = self.plots[2].update()
+            if retval:
+                self.send(self.sig_update_plot2, retval[0])
+                self.send(self.sig_update_position2, retval[1])
+        if config.get('channel3', 'state') == 'on':
+            retval = self.plots[3].update()
+            if retval:
+                self.send(self.sig_update_plot3, retval[0])
+                self.send(self.sig_update_position3, retval[1])
+        if config.get('channel4', 'state') == 'on':
+            retval = self.plots[4].update()
+            if retval:
+                self.send(self.sig_update_plot4, retval[0])
+                self.send(self.sig_update_position4, retval[1])
+        if config.get('channel5', 'state') == 'on':
+            retval = self.plots[5].update()
+            if retval:
+                self.send(self.sig_update_plot5, retval[0])
+                self.send(self.sig_update_position5, retval[1])
+        if config.get('channel6', 'state') == 'on':
+            retval = self.plots[6].update()
+            if retval:
+                self.send(self.sig_update_plot6, retval[0])
+                self.send(self.sig_update_position6, retval[1])
+        if config.get('channel7', 'state') == 'on':
+            retval = self.plots[7].update()
+            if retval:
+                self.send(self.sig_update_plot7, retval[0])
+                self.send(self.sig_update_position7, retval[1])
+        if config.get('channel8', 'state') == 'on':
+            retval = self.plots[8].update()
+            if retval:
+                self.send(self.sig_update_plot8, retval[0])
+                self.send(self.sig_update_position8, retval[1])
+
+
+    def stop(self):
+        self.stopped = True
+        print('Stopped received in plotthread')
+
+
+    def run(self):
+        while not self.stopped:
+            self.update()
+            #time.sleep(0.1)
+            time.sleep(float(config.get('general', 'refresh')))
+
+
+
+class PlotThread_bak(QtCore.QThread):
+    plot_update = QtCore.pyqtSignal(object)
+    plot_position = QtCore.pyqtSignal(object)
+
+    def __init__(self, channel, datalist):
+        # Configure signals used to communicate to widget running in main thread
+
+        QtCore.QThread.__init__(self)
+        self.channel = channel
+        self.datalist = datalist
+
+        # Signals are now shared among instances because class variable
+
+
+    def get_timestamp(self):
+        return datetime.datetime.today()
+
+
+    def setup(self):
         # Vars to keep track of frames and location of frames
         self.framecount = 0             # Stores the number of frames for every channel so we can check if it fits in the buffer
         self.last_frame = False        # last_frames is the  dict that stores the last fetched frame by channel
@@ -109,20 +274,11 @@ class PlotThread(StoppableThread):
         buffer_size = 1000              # Initial buffer size
         self.n_plots = 8                # Number of plots(channels)
 
-        # Setup plots and curves fill their contents with empty numpy arrays
-        for i in range(0, self.n_plots):
-            if config.get('channel' + str(i+1), 'state') == 'on':
-                self.w.setRange(xRange=[-buffer_size, 0])
-                self.w.setLimits(xMax=0)
-                self.w.setClipToView(True)
-                self.w.setDownsampling(mode='peak')
-                self.w.showGrid(x=True, y=True)
+        # fill buffer with empty numpy array
+        data = np.empty(1)
 
-                self.curve = self.w.plot(pen=i)
-                data = np.empty(1)
-
-                self.fb_y = data
-                self.fb_x = data
+        self.fb_y = data
+        self.fb_x = data
 
 
     def update_channel(self, channel, ys, xs):
@@ -130,51 +286,39 @@ class PlotThread(StoppableThread):
         # lists start with zero
         channel = channel - 1
 
-        # Short names are good!
-        framecount = self.framecount
-        fb_y = self.fb_y
-        fb_x = self.fb_x
-        curve = self.curve
-
         # Combine the old buffer and the new data
-        fb_y = np.append(fb_y, ys)
-        fb_x = np.append(fb_x, xs)
+        self.fb_y = np.append(self.fb_y, ys)
+        self.fb_x = np.append(self.fb_x, xs)
 
         # update the framecount with the new data (numpy array length is fetched with data.shape[0]
-        framecount += ys.shape[0]
+        self.framecount += ys.shape[0]
 
         # If the length of data is bigger than the buffer, we have to enlarge the buffer
-        #log.info('>>> Framecount: {0}, len fb_y {1}'.format(framecount, fb_y.shape[0]))
-        if int(framecount) >= int(fb_y.shape[0]):
-            log.info('>>> we have to enlarge buffer: {0} >= {1}'.format(framecount, fb_y.shape[0]))
+        if int(self.framecount) >= int(self.fb_y.shape[0]):
+            log.info('>>> we have to enlarge buffer: {0} >= {1}'.format(self.framecount, self.fb_y.shape[0]))
 
             # Backup old bufer
-            tmp_y = fb_y[:]
-            tmp_x = fb_x[:]
+            tmp_y = self.fb_y[:]
+            tmp_x = self.fb_x[:]
             
             # Create new buffer, double the size of the old one
-            fb_y = np.empty(fb_y.shape[0] + fb_y.shape(0) + 10)
-            fb_x = np.empty(fb_x.shape[0] + fb_x.shape(0) + 10)
+            self.fb_y = np.empty(self.fb_y.shape[0] + self.fb_y.shape(0) + 10)
+            self.fb_x = np.empty(self.fb_x.shape[0] + self.fb_x.shape(0) + 10)
 
             # Copy the buffer back to the first half of the new, bigger buffer
-            fb_y[:tmp_y.shape[0]] = tmp_y
-            fb_x[:tmp_x.shape[0]] = tmp_x
+            self.fb_y[:tmp_y.shape[0]] = tmp_y
+            self.fb_x[:tmp_x.shape[0]] = tmp_x
 
         # Update pyqtgraph with the first half (new) of the buffer
-        #curve.setData(fb_y[:framecount], fb_x[:framecount])
-        curve.setData(fb_y[:framecount])
-        curve.setPos(-framecount, 0)
+        #self.curve.setData(self.fb_y[:self.framecount])
+        #self.curve.setPos(-self.framecount, 0)
+
+        self.plot_update.emit(self.fb_y[:self.framecount])
+        self.plot_position.emit(-self.framecount)
 
         #fps = self.calculate_fps(len(ys))
         #if fps:
         #    self.w.setTitle('Channel {0} - FPS {1:.0f}'.format(channel, self.fps))
-
-        # TODO limit displayed channels to configured channels
-        self.framecount = framecount
-        # Move buffers back to globals
-        self.fb_y = fb_y[:]
-        self.fb_x = fb_x[:]
-        self.curve = curve
 
 
     def update(self):
@@ -232,22 +376,23 @@ class PlotThread(StoppableThread):
 
     def run(self):
         self.setup()
-        while not self.stopped():
+        while True:
             self.update()
-            time.sleep(int(config.get('general', 'refresh')))
-
+            #time.sleep(int(config.get('general', 'refresh')))
+            time.sleep(0.05)
 
 
 class MainWindow(TemplateBaseClass):  
     def __init__(self):
         TemplateBaseClass.__init__(self)
-        self.setWindowTitle('pyqtgraph example: Qt Designer')
+        self.setWindowTitle('Pyeeg')
         
-        self.threads = Threads()
         global config
         config = Config()
         self.datalist = DataList()
         self.eeg = EEG(config, self.datalist)
+
+        # Some settings
         self.eeg.set_config_defaults()
         self.eeg.set_srb1()
         self.eeg.set_ref()
@@ -489,42 +634,158 @@ class MainWindow(TemplateBaseClass):
 
     def start(self):
         print('start')
+        # Clear all plots
+        for channel in range(1,8+1): self.clear_plot(channel)
+
+        self.curves = {}
         self.connect()
         self.eeg.send_settings()
         self.eeg.send_start()
-        self.data_thread = GetDataThread(self.eeg).start()
-        self.plots = []
 
-        if config.get('channel1', 'state') == 'on':
-            self.plots.append(PlotThread(1, self.ui.plotCh1, self.datalist).start())
-        if config.get('channel2', 'state') == 'on':
-            self.plots.append(PlotThread(2, self.ui.plotCh2, self.datalist).start())
-        if config.get('channel3', 'state') == 'on':
-            self.plots.append(PlotThread(3, self.ui.plotCh3, self.datalist).start())
-        if config.get('channel4', 'state') == 'on':
-            self.plots.append(PlotThread(4, self.ui.plotCh4, self.datalist).start())
-        if config.get('channel5', 'state') == 'on':
-            self.plots.append(PlotThread(5, self.ui.plotCh5, self.datalist).start())
-        if config.get('channel6', 'state') == 'on':
-            self.plots.append(PlotThread(6, self.ui.plotCh6, self.datalist).start())
-        if config.get('channel7', 'state') == 'on':
-            self.plots.append(PlotThread(7, self.ui.plotCh7, self.datalist).start())
-        if config.get('channel8', 'state') == 'on':
-            self.plots.append(PlotThread(8, self.ui.plotCh8, self.datalist).start())
+        self.threads = []
+        data_thread = GetDataThread(self.eeg)
+        self.threads.append(data_thread)
+        data_thread.start()
+
+        plot_thread = PlotThread(self.datalist)
+        plot_thread.start()
+        self.threads.append(plot_thread)
+
+        plot_thread.sig_update_plot1.connect(self.on_update_plot1)
+        plot_thread.sig_update_plot2.connect(self.on_update_plot2)
+        plot_thread.sig_update_plot3.connect(self.on_update_plot3)
+        plot_thread.sig_update_plot4.connect(self.on_update_plot4)
+        plot_thread.sig_update_plot5.connect(self.on_update_plot5)
+        plot_thread.sig_update_plot6.connect(self.on_update_plot6)
+        plot_thread.sig_update_plot7.connect(self.on_update_plot7)
+        plot_thread.sig_update_plot8.connect(self.on_update_plot8)
+        plot_thread.sig_update_position1.connect(self.on_update_position1)
+        plot_thread.sig_update_position2.connect(self.on_update_position2)
+        plot_thread.sig_update_position3.connect(self.on_update_position3)
+        plot_thread.sig_update_position4.connect(self.on_update_position4)
+        plot_thread.sig_update_position5.connect(self.on_update_position5)
+        plot_thread.sig_update_position6.connect(self.on_update_position6)
+        plot_thread.sig_update_position7.connect(self.on_update_position7)
+        plot_thread.sig_update_position8.connect(self.on_update_position8)
+        
+        for channel in range(1,8+1):
+            if config.get('channel{0}'.format(str(channel)), 'state') == 'on':
+                self.setup_plot(channel)
+
+
+
+    def setup_plot(self, channel):
+        # Must be set before creating any widgets
+        pg.setConfigOption('background', 0.1)
+
+        if channel == 1:
+            # Setup plots and curves
+            self.ui.plotCh1.setRange(xRange=[-1000, 0])
+            self.ui.plotCh1.setLimits(xMax=0)
+            self.ui.plotCh1.setClipToView(True)
+            self.ui.plotCh1.setDownsampling(mode='peak')
+            self.ui.plotCh1.showGrid(x=True, y=True)
+            self.curves[1] = self.ui.plotCh1.plot(pen='b')
+        elif channel == 2:
+            # Setup plots and curves
+            self.ui.plotCh2.setRange(xRange=[-1000, 0])
+            self.ui.plotCh2.setLimits(xMax=0)
+            self.ui.plotCh2.setClipToView(True)
+            self.ui.plotCh2.setDownsampling(mode='peak')
+            self.ui.plotCh2.showGrid(x=True, y=True)
+            self.curves[2] = self.ui.plotCh2.plot(pen='b')
+        elif channel == 3:
+            # Setup plots and curves
+            self.ui.plotCh3.setRange(xRange=[-1000, 0])
+            self.ui.plotCh3.setLimits(xMax=0)
+            self.ui.plotCh3.setClipToView(True)
+            self.ui.plotCh3.setDownsampling(mode='peak')
+            self.ui.plotCh3.showGrid(x=True, y=True)
+            self.curves[3] = self.ui.plotCh3.plot(pen='b')
+        elif channel == 4:
+            # Setup plots and curves
+            self.ui.plotCh4.setRange(xRange=[-1000, 0])
+            self.ui.plotCh4.setLimits(xMax=0)
+            self.ui.plotCh4.setClipToView(True)
+            self.ui.plotCh4.setDownsampling(mode='peak')
+            self.ui.plotCh4.showGrid(x=True, y=True)
+            self.curves[4] = self.ui.plotCh4.plot(pen='b')
+        elif channel == 5:
+            # Setup plots and curves
+            self.ui.plotCh5.setRange(xRange=[-1000, 0])
+            self.ui.plotCh5.setLimits(xMax=0)
+            self.ui.plotCh5.setClipToView(True)
+            self.ui.plotCh5.setDownsampling(mode='peak')
+            self.ui.plotCh5.showGrid(x=True, y=True)
+            self.curves[5] = self.ui.plotCh5.plot(pen='b')
+        elif channel == 6:
+            # Setup plots and curves
+            self.ui.plotCh6.setRange(xRange=[-1000, 0])
+            self.ui.plotCh6.setLimits(xMax=0)
+            self.ui.plotCh6.setClipToView(True)
+            self.ui.plotCh6.setDownsampling(mode='peak')
+            self.ui.plotCh6.showGrid(x=True, y=True)
+            self.curves[6] = self.ui.plotCh6.plot(pen='b')
+        elif channel == 7:
+            # Setup plots and curves
+            self.ui.plotCh7.setRange(xRange=[-1000, 0])
+            self.ui.plotCh7.setLimits(xMax=0)
+            self.ui.plotCh7.setClipToView(True)
+            self.ui.plotCh7.setDownsampling(mode='peak')
+            self.ui.plotCh7.showGrid(x=True, y=True)
+            self.curves[7] = self.ui.plotCh7.plot(pen='b')
+        elif channel == 8:
+            # Setup plots and curves
+            self.ui.plotCh8.setRange(xRange=[-1000, 0])
+            self.ui.plotCh8.setLimits(xMax=0)
+            self.ui.plotCh8.setClipToView(True)
+            self.ui.plotCh8.setDownsampling(mode='peak')
+            self.ui.plotCh8.showGrid(x=True, y=True)
+            self.curves[8] = self.ui.plotCh8.plot(pen='b')
+
+# NOTE set position might be the problem due to a timing issue
+# make signals for all plots from one thread
+
+    def on_update_plot1(self, data): self.curves[1].setData(data)
+    def on_update_plot2(self, data): self.curves[2].setData(data)
+    def on_update_plot3(self, data): self.curves[3].setData(data)
+    def on_update_plot4(self, data): self.curves[4].setData(data)
+    def on_update_plot5(self, data): self.curves[5].setData(data)
+    def on_update_plot6(self, data): self.curves[6].setData(data)
+    def on_update_plot7(self, data): self.curves[7].setData(data)
+    def on_update_plot8(self, data): self.curves[8].setData(data)
+    def on_update_position1(self, position): self.curves[1].setPos(position, 0)
+    def on_update_position2(self, position): self.curves[2].setPos(position, 0)
+    def on_update_position3(self, position): self.curves[3].setPos(position, 0)
+    def on_update_position4(self, position): self.curves[4].setPos(position, 0)
+    def on_update_position5(self, position): self.curves[5].setPos(position, 0)
+    def on_update_position6(self, position): self.curves[6].setPos(position, 0)
+    def on_update_position7(self, position): self.curves[7].setPos(position, 0)
+    def on_update_position8(self, position): self.curves[8].setPos(position, 0)
 
 
     def stop(self):
         print('stop')
         self.eeg.send_stop()
-        for plot in self.plots:
-            plot.stop()
+        for thread in self.threads:
+            thread.stop()
 
-        self.data_thread.stop()
         self.eeg.disconnect()
 
 
     def connect(self):
         self.eeg.connect()
+
+
+    def clear_plot(self, channel):
+        if channel == 1: self.ui.plotCh1.clear()
+        if channel == 2: self.ui.plotCh2.clear()
+        if channel == 3: self.ui.plotCh3.clear()
+        if channel == 4: self.ui.plotCh4.clear()
+        if channel == 5: self.ui.plotCh5.clear()
+        if channel == 6: self.ui.plotCh6.clear()
+        if channel == 7: self.ui.plotCh7.clear()
+        if channel == 8: self.ui.plotCh8.clear()
 
 
     def toggle_sidebar(self):

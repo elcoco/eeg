@@ -856,44 +856,25 @@ class EEG(object):
 
 
     def get_data(self):
-        start_time = self.get_timestamp()
-        total_frames = 0
-
+        # Receive length of data first
+        skipped = 0
         while True:
-            # TODO Some of the data is corrupted
-            # Receive length of data first
-            skipped = 0
-            while True:
-                length = self.socket.receive(4)
+            length = self.socket.receive(4)
+            if length:
                 if length[0] == '#':
                     length = length[1:]
                     break
-                skipped += 1
-            if self.test(length):
-                # then get the full frame 
-                data = self.socket.receive(length)
-                if data:
-                    if self.add_data(data):
-                        total_frames += 1
-                else:
-                    log.error('Error getting data, no data')
-            else:
-                log.error('Error getting data, length is corrupted: {0}'.format(length))
-
-            if self.config.get('general', 'run-time') != -1:
-                # If run-time has reached, send the STOP command to the server
-                if start_time + int(self.config.get('general', 'run-time')) <= self.get_timestamp():
-                    log.info('Run time reached')
-                    self.socket.send('STOP')
-
-                    log.info("Total frames: {0}".format(total_frames))
-                    log.info("Total time (s): {0}".format(self.get_timestamp() - start_time))
-                    log.info("FPS: {0}".format(total_frames / (self.get_timestamp() - start_time)))
-                    log.info("Skipped chars: {0}".format(skipped))
-
-                    # TODO: receive total frames sent from server and calculate dropped packages
-                    # TODO: Packet timing is important since we want to do spectrum analysis
+            skipped += 1
+        if self.test(length):
+            # then get the full frame 
+            data = self.socket.receive(length)
+            if data:
+                if self.add_data(data):
                     return True
+            else:
+                log.error('Error getting data, no data')
+        else:
+            log.error('Error getting data, length is corrupted: {0}'.format(length))
 
         log.error('An error occured while transfer')
         return False
@@ -1022,6 +1003,7 @@ class EEG(object):
         self.config.set('general', 'length-size', '3')
         self.config.set('general', 'run-time', '-1')
         self.config.set('general', 'reference', 'internal')
+        self.config.set('general', 'refresh', '0.5')
         self.config.set('channel1', 'state', 'on')
         self.config.set('channel2', 'state', 'on')
         self.config.set('channel3', 'state', 'on')
@@ -1099,7 +1081,6 @@ class EEG(object):
 
 
     def disconnect(self):
-        # Close
         log.info('Connection to server is closed')
         self.socket.close()
 
