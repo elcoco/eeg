@@ -1003,7 +1003,7 @@ class EEG(object):
         self.config.set('general', 'length-size', '3')
         self.config.set('general', 'run-time', '-1')
         self.config.set('general', 'reference', 'internal')
-        self.config.set('general', 'refresh', '0.5')
+        self.config.set('general', 'refresh', '0.1')
         self.config.set('channel1', 'state', 'on')
         self.config.set('channel2', 'state', 'on')
         self.config.set('channel3', 'state', 'on')

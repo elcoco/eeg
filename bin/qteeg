@@ -439,6 +439,12 @@ class MainWindow(TemplateBaseClass):
         self.ui.actionQuit.triggered.connect(self.close)
         self.ui.comboBoxRefresh.currentIndexChanged.connect(self.set_refresh)
 
+        # Set default states
+        index = self.ui.comboBoxRefresh.findText(str(config.get('general', 'refresh')), QtCore.Qt.MatchFixedString)
+        if index >= 0:
+            self.ui.comboBoxRefresh.setCurrentIndex(index)
+
+
         self.show()
         
 

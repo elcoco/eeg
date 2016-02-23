@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>772</width>
-    <height>648</height>
+    <height>720</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -73,8 +73,8 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>161</width>
-        <height>69</height>
+        <width>146</width>
+        <height>72</height>
        </rect>
       </property>
       <attribute name="label">
@@ -148,8 +148,8 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>161</width>
-        <height>69</height>
+        <width>146</width>
+        <height>72</height>
        </rect>
       </property>
       <attribute name="label">
@@ -223,8 +223,8 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>161</width>
-        <height>69</height>
+        <width>146</width>
+        <height>72</height>
        </rect>
       </property>
       <attribute name="label">
@@ -298,8 +298,8 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>161</width>
-        <height>69</height>
+        <width>146</width>
+        <height>72</height>
        </rect>
       </property>
       <attribute name="label">
@@ -373,8 +373,8 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>161</width>
-        <height>69</height>
+        <width>146</width>
+        <height>72</height>
        </rect>
       </property>
       <attribute name="label">
@@ -448,8 +448,8 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>161</width>
-        <height>69</height>
+        <width>146</width>
+        <height>72</height>
        </rect>
       </property>
       <attribute name="label">
@@ -523,8 +523,8 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>161</width>
-        <height>69</height>
+        <width>146</width>
+        <height>72</height>
        </rect>
       </property>
       <attribute name="label">
@@ -598,8 +598,8 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>161</width>
-        <height>69</height>
+        <width>146</width>
+        <height>72</height>
        </rect>
       </property>
       <attribute name="label">
@@ -694,7 +694,6 @@
    <attribute name="toolBarBreak">
     <bool>false</bool>
    </attribute>
-   <addaction name="actionConnect"/>
    <addaction name="actionStart"/>
    <addaction name="actionStop"/>
    <addaction name="actionToggleSidebar"/>
@@ -715,9 +714,9 @@
         <property name="geometry">
          <rect>
           <x>0</x>
-          <y>-71</y>
-          <width>153</width>
-          <height>272</height>
+          <y>0</y>
+          <width>141</width>
+          <height>284</height>
          </rect>
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_11">
@@ -818,57 +817,102 @@
             <widget class="QComboBox" name="comboBoxRefresh">
              <item>
               <property name="text">
+               <string>0.01</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>0.02</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>0.03</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>0.04</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
                <string>0.05</string>
               </property>
              </item>
              <item>
               <property name="text">
-               <string>0.10</string>
+               <string>0.06</string>
               </property>
              </item>
              <item>
               <property name="text">
-               <string>0.20</string>
+               <string>0.07</string>
               </property>
              </item>
              <item>
               <property name="text">
-               <string>0.30</string>
+               <string>0.08</string>
               </property>
              </item>
              <item>
               <property name="text">
-               <string>0.40</string>
+               <string>0.09</string>
               </property>
              </item>
              <item>
               <property name="text">
-               <string>0.50</string>
+               <string>0.1</string>
               </property>
              </item>
              <item>
               <property name="text">
-               <string>0.60</string>
+               <string>0.15</string>
               </property>
              </item>
              <item>
               <property name="text">
-               <string>0.70</string>
+               <string>0.2</string>
               </property>
              </item>
              <item>
               <property name="text">
-               <string>0.80</string>
+               <string>0.3</string>
               </property>
              </item>
              <item>
               <property name="text">
-               <string>0.90</string>
+               <string>0.4</string>
               </property>
              </item>
              <item>
               <property name="text">
-               <string>1.00</string>
+               <string>0.5</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>0.6</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>0.7</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>0.8</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>0.9</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>1.0</string>
               </property>
              </item>
             </widget>
@@ -891,18 +935,27 @@
   </widget>
   <action name="actionStart">
    <property name="icon">
-    <iconset theme="QStyle.SP_MediaPlay"/>
+    <iconset>
+     <normaloff>../../tmp/Antu/Antu/actions/32/media-playback-start.svg</normaloff>../../tmp/Antu/Antu/actions/32/media-playback-start.svg</iconset>
    </property>
    <property name="text">
     <string>Start</string>
    </property>
   </action>
   <action name="actionStop">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../tmp/Antu/Antu/actions/32/media-playback-stop.svg</normaloff>../../tmp/Antu/Antu/actions/32/media-playback-stop.svg</iconset>
+   </property>
    <property name="text">
     <string>Stop</string>
    </property>
   </action>
   <action name="actionToggleSidebar">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../tmp/Antu/Antu/actions/32/view-left-close.svg</normaloff>../../tmp/Antu/Antu/actions/32/view-left-close.svg</iconset>
+   </property>
    <property name="text">
     <string>Toggle Sidebar</string>
    </property>
@@ -922,10 +975,14 @@
   </action>
   <action name="actionStatusText">
    <property name="text">
-    <string> </string>
+    <string/>
    </property>
   </action>
   <action name="actionQuit">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../tmp/Antu/Antu/actions/32/window-close.svg</normaloff>../../tmp/Antu/Antu/actions/32/window-close.svg</iconset>
+   </property>
    <property name="text">
     <string>Quit</string>
    </property>
