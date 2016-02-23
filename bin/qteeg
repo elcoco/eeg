@@ -382,6 +382,7 @@ class PlotThread_bak(QtCore.QThread):
             time.sleep(0.05)
 
 
+
 class MainWindow(TemplateBaseClass):  
     def __init__(self):
         TemplateBaseClass.__init__(self)
@@ -427,12 +428,15 @@ class MainWindow(TemplateBaseClass):
         self.ui.checkBox_ch7_visible.stateChanged.connect(self.channel7_visible)
         self.ui.checkBox_ch8_visible.stateChanged.connect(self.channel8_visible)
 
+        self.ui.pushButtonDisableAll.clicked.connect(self.disable_all)
+
         self.ui.actionExit.triggered.connect(QtGui.qApp.quit)
 
         self.ui.actionStart.triggered.connect(self.start)
         self.ui.actionStop.triggered.connect(self.stop)
         self.ui.actionConnect.triggered.connect(self.connect)
         self.ui.actionToggleSidebar.triggered.connect(self.toggle_sidebar)
+        self.ui.actionQuit.triggered.connect(self.close)
         self.ui.comboBoxRefresh.currentIndexChanged.connect(self.set_refresh)
 
         self.show()
@@ -630,6 +634,40 @@ class MainWindow(TemplateBaseClass):
     def channel8_gain(self):
         gain = self.ui.comboBox_ch8_gain.currentText()
         self.eeg.set_gain(8, gain)
+
+
+    def disable_all(self):
+        self.ui.checkBox_ch1_visible.setChecked(False)
+        self.ui.checkBox_ch1_enabled.setChecked(False)
+        self.ui.plotCh1.setHidden(True)
+
+        self.ui.checkBox_ch2_visible.setChecked(False)
+        self.ui.checkBox_ch2_enabled.setChecked(False)
+        self.ui.plotCh2.setHidden(True)
+
+        self.ui.checkBox_ch3_visible.setChecked(False)
+        self.ui.checkBox_ch3_enabled.setChecked(False)
+        self.ui.plotCh3.setHidden(True)
+
+        self.ui.checkBox_ch4_visible.setChecked(False)
+        self.ui.checkBox_ch4_enabled.setChecked(False)
+        self.ui.plotCh4.setHidden(True)
+
+        self.ui.checkBox_ch5_visible.setChecked(False)
+        self.ui.checkBox_ch5_enabled.setChecked(False)
+        self.ui.plotCh5.setHidden(True)
+
+        self.ui.checkBox_ch6_visible.setChecked(False)
+        self.ui.checkBox_ch6_enabled.setChecked(False)
+        self.ui.plotCh6.setHidden(True)
+
+        self.ui.checkBox_ch7_visible.setChecked(False)
+        self.ui.checkBox_ch7_enabled.setChecked(False)
+        self.ui.plotCh7.setHidden(True)
+
+        self.ui.checkBox_ch8_visible.setChecked(False)
+        self.ui.checkBox_ch8_enabled.setChecked(False)
+        self.ui.plotCh8.setHidden(True)
 
 
     def start(self):
