@@ -936,7 +936,7 @@
   <action name="actionStart">
    <property name="icon">
     <iconset>
-     <normaloff>../../tmp/Antu/Antu/actions/32/media-playback-start.svg</normaloff>../../tmp/Antu/Antu/actions/32/media-playback-start.svg</iconset>
+     <normaloff>icons/media-playback-start.svg</normaloff>icons/media-playback-start.svg</iconset>
    </property>
    <property name="text">
     <string>Start</string>
@@ -945,7 +945,7 @@
   <action name="actionStop">
    <property name="icon">
     <iconset>
-     <normaloff>../../tmp/Antu/Antu/actions/32/media-playback-stop.svg</normaloff>../../tmp/Antu/Antu/actions/32/media-playback-stop.svg</iconset>
+     <normaloff>icons/media-playback-stop.svg</normaloff>icons/media-playback-stop.svg</iconset>
    </property>
    <property name="text">
     <string>Stop</string>
@@ -954,7 +954,7 @@
   <action name="actionToggleSidebar">
    <property name="icon">
     <iconset>
-     <normaloff>../../tmp/Antu/Antu/actions/32/view-left-close.svg</normaloff>../../tmp/Antu/Antu/actions/32/view-left-close.svg</iconset>
+     <normaloff>icons/view-left-close.svg</normaloff>icons/view-left-close.svg</iconset>
    </property>
    <property name="text">
     <string>Toggle Sidebar</string>
@@ -981,7 +981,7 @@
   <action name="actionQuit">
    <property name="icon">
     <iconset>
-     <normaloff>../../tmp/Antu/Antu/actions/32/window-close.svg</normaloff>../../tmp/Antu/Antu/actions/32/window-close.svg</iconset>
+     <normaloff>icons/window-close.svg</normaloff>icons/window-close.svg</iconset>
    </property>
    <property name="text">
     <string>Quit</string>

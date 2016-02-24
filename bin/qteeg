@@ -419,6 +419,15 @@ class MainWindow(TemplateBaseClass):
         self.ui.comboBox_ch7_gain.activated.connect(self.channel7_gain)
         self.ui.comboBox_ch8_gain.activated.connect(self.channel8_gain)
 
+        self.combobox_gain = [ self.ui.comboBox_ch1_gain,
+                                self.ui.comboBox_ch2_gain,
+                                self.ui.comboBox_ch3_gain,
+                                self.ui.comboBox_ch4_gain,
+                                self.ui.comboBox_ch5_gain,
+                                self.ui.comboBox_ch6_gain,
+                                self.ui.comboBox_ch7_gain,
+                                self.ui.comboBox_ch8_gain]
+
         self.ui.checkBox_ch1_visible.stateChanged.connect(self.channel1_visible)
         self.ui.checkBox_ch2_visible.stateChanged.connect(self.channel2_visible)
         self.ui.checkBox_ch3_visible.stateChanged.connect(self.channel3_visible)
@@ -439,11 +448,18 @@ class MainWindow(TemplateBaseClass):
         self.ui.actionQuit.triggered.connect(self.close)
         self.ui.comboBoxRefresh.currentIndexChanged.connect(self.set_refresh)
 
-        # Set default states
+        # TODO do this trick with lists on all widgets
+        # Set default states of checkboxes/comboboxes
         index = self.ui.comboBoxRefresh.findText(str(config.get('general', 'refresh')), QtCore.Qt.MatchFixedString)
         if index >= 0:
             self.ui.comboBoxRefresh.setCurrentIndex(index)
 
+        channel = 0
+        for combobox in self.combobox_gain:
+            channel += 1
+            index = combobox.findText(str(config.get('channel{0}'.format(str(channel)), 'gain')), QtCore.Qt.MatchFixedString)
+            if index >= 0:
+                combobox.setCurrentIndex(index)
 
         self.show()
         
