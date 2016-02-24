@@ -469,7 +469,7 @@ int sendData(int socketfd) {
                                                          cd.CH6_DATA, \
                                                          cd.CH7_DATA, \
                                                          cd.CH8_DATA);
-        sprintf(out2, "%03d%s", strlen(out), out);
+        sprintf(out2, "#%03d%s", strlen(out), out);
 
         if (write(socketfd, out2, strlen(out2)) == -1) {
             printf("could not write\n");
