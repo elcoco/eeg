@@ -5,6 +5,8 @@ from pyqtgraph.Qt import QtCore, QtGui
 import numpy as np
 import os
 
+from functools import partial
+
 from pyeeg import Config
 from pyeeg import EEG
 from pyeeg import Log as log
@@ -29,21 +31,38 @@ uiFile = os.path.join(path, 'qteeg.ui')
 WindowTemplate, TemplateBaseClass = pg.Qt.loadUiType(uiFile)
 
 
-class GetDataThread(QtCore.QThread):
-    def __init__(self, eeg):
-        QtCore.QThread.__init__(self)
-        self.eeg = eeg
+class StoppableThread(object):
+    def __init__(self):
         self.stopped = False
+        self.paused = False
 
 
     def stop(self):
-        print('Stopped received in datathread')
         self.stopped = True
+
+
+    def pause(self):
+        if self.paused:
+            self.paused = False
+        else:
+            self.paused = True
+
+
+
+class GetDataThread(QtCore.QThread, StoppableThread):
+    def __init__(self, eeg):
+        QtCore.QThread.__init__(self)
+        StoppableThread.__init__(self)
+        self.eeg = eeg
 
 
     def run(self):
         while not self.stopped:
-            self.eeg.get_data()
+            if not self.paused:
+                self.eeg.get_data()
+            else:
+                time.sleep(0.5)
+
 
 
 class UpdatePlot(object):
@@ -97,7 +116,7 @@ class UpdatePlot(object):
             xs = []
 
             for data in datas:
-                ys.append(int(data.get_data()))
+                ys.append(float(data.get_data()))
                 d = data.get_timestamp()
                 xs.append(int('{0}{1}{2}'.format(d.hour, d.minute, d.second)))
 
@@ -147,7 +166,7 @@ class UpdatePlot(object):
 
 
 
-class PlotThread(QtCore.QThread):
+class PlotThread(QtCore.QThread, StoppableThread):
     signals_update = {}
     signals_position = {}
 
@@ -172,7 +191,7 @@ class PlotThread(QtCore.QThread):
     def __init__(self, datalist):
         QtCore.QThread.__init__(self)
         self.plots = {}
-        self.stopped = False
+        StoppableThread.__init__(self)
 
         # Create all plot update objects and put them in dict
         for channel in range(1,8+1):
@@ -228,158 +247,14 @@ class PlotThread(QtCore.QThread):
                 self.send(self.sig_update_position8, retval[1])
 
 
-    def stop(self):
-        self.stopped = True
-        print('Stopped received in plotthread')
-
-
     def run(self):
         while not self.stopped:
-            self.update()
-            #time.sleep(0.1)
-            time.sleep(float(config.get('general', 'refresh')))
-
-
-
-class PlotThread_bak(QtCore.QThread):
-    plot_update = QtCore.pyqtSignal(object)
-    plot_position = QtCore.pyqtSignal(object)
-
-    def __init__(self, channel, datalist):
-        # Configure signals used to communicate to widget running in main thread
-
-        QtCore.QThread.__init__(self)
-        self.channel = channel
-        self.datalist = datalist
-
-        # Signals are now shared among instances because class variable
-
-
-    def get_timestamp(self):
-        return datetime.datetime.today()
-
-
-    def setup(self):
-        # Vars to keep track of frames and location of frames
-        self.framecount = 0             # Stores the number of frames for every channel so we can check if it fits in the buffer
-        self.last_frame = False        # last_frames is the  dict that stores the last fetched frame by channel
-        self.running = False            # Make sure only one verion of update() is running
-
-        self.fps = False                # Keep track of FPS
-        self.fps_frames_count = 0
-        self.fps_t_interval = 1         # The timespan over which the FPS is calculated in seconds
-        self.fps_t_start = False
-        self.fps_t_end = False
-
-        buffer_size = 1000              # Initial buffer size
-        self.n_plots = 8                # Number of plots(channels)
-
-        # fill buffer with empty numpy array
-        data = np.empty(1)
-
-        self.fb_y = data
-        self.fb_x = data
-
-
-    def update_channel(self, channel, ys, xs):
-        # TODO Overflow errors must have something to do with the size of the buffer
-        # lists start with zero
-        channel = channel - 1
-
-        # Combine the old buffer and the new data
-        self.fb_y = np.append(self.fb_y, ys)
-        self.fb_x = np.append(self.fb_x, xs)
-
-        # update the framecount with the new data (numpy array length is fetched with data.shape[0]
-        self.framecount += ys.shape[0]
-
-        # If the length of data is bigger than the buffer, we have to enlarge the buffer
-        if int(self.framecount) >= int(self.fb_y.shape[0]):
-            log.info('>>> we have to enlarge buffer: {0} >= {1}'.format(self.framecount, self.fb_y.shape[0]))
-
-            # Backup old bufer
-            tmp_y = self.fb_y[:]
-            tmp_x = self.fb_x[:]
-            
-            # Create new buffer, double the size of the old one
-            self.fb_y = np.empty(self.fb_y.shape[0] + self.fb_y.shape(0) + 10)
-            self.fb_x = np.empty(self.fb_x.shape[0] + self.fb_x.shape(0) + 10)
-
-            # Copy the buffer back to the first half of the new, bigger buffer
-            self.fb_y[:tmp_y.shape[0]] = tmp_y
-            self.fb_x[:tmp_x.shape[0]] = tmp_x
-
-        # Update pyqtgraph with the first half (new) of the buffer
-        #self.curve.setData(self.fb_y[:self.framecount])
-        #self.curve.setPos(-self.framecount, 0)
-
-        self.plot_update.emit(self.fb_y[:self.framecount])
-        self.plot_position.emit(-self.framecount)
-
-        #fps = self.calculate_fps(len(ys))
-        #if fps:
-        #    self.w.setTitle('Channel {0} - FPS {1:.0f}'.format(channel, self.fps))
-
-
-    def update(self):
-        # Make sure only one version of this method is running
-        if self.running: return
-        self.running = True
-
-        # Retrieve list of objects newer than last_item (which is the Data() object that was last)
-        datas = self.datalist.get_last_items(self.channel, self.last_frame)
-
-        if datas:
-            # remove first lot of frames if it is the first go, this should be changed obviously
-            if not self.last_frame:
-                datas = datas[-1:]
-
-            # Set last received frame in self.last_frames
-            self.last_frame = datas[-1]
-
-            ys = []
-            xs = []
-
-            for data in datas:
-                ys.append(int(data.get_data()))
-                d = data.get_timestamp()
-                xs.append(int('{0}{1}{2}'.format(d.hour, d.minute, d.second)))
-
-            # Update the graph with the new data, provide -> channel, chunk of data, last state, current state
-            self.update_channel(self.channel, np.array(ys), np.array(xs))
-
-        self.running = False
-
-
-    def calculate_fps(self, n_frames):
-        # Stores frames and time elapsed and updates when t_update has passed
-        # List start at 0
-        if not self.fps_t_start:
-            self.fps_t_start = self.get_timestamp()
-
-        t_current = self.get_timestamp()
-        t_elapsed = (t_current - self.fps_t_start).total_seconds()
-
-        if t_elapsed <= self.fps_t_interval:
-            # update time not reached yet
-            self.fps_frames_count += n_frames
-            return False
-        else:
-            # update time has been reached --> change self.fps
-            self.fps = self.fps_frames_count / t_elapsed
-
-            # Reset variables
-            self.fps_t_start = self.get_timestamp()
-            self.fps_frames_count = 0
-            return self.fps
-
-
-    def run(self):
-        self.setup()
-        while True:
-            self.update()
-            #time.sleep(int(config.get('general', 'refresh')))
-            time.sleep(0.05)
+            if not self.paused:
+                self.update()
+                #time.sleep(0.1)
+                time.sleep(float(config.get('general', 'refresh')))
+            else:
+                time.sleep(0.5)
 
 
 
@@ -393,6 +268,10 @@ class MainWindow(TemplateBaseClass):
         self.datalist = DataList()
         self.eeg = EEG(config, self.datalist)
 
+        # keep track of application state (play/pause)
+        self.plotting = False
+        self.paused = False
+
         # Some settings
         self.eeg.set_config_defaults()
         self.eeg.set_srb1()
@@ -401,51 +280,60 @@ class MainWindow(TemplateBaseClass):
         # Create the main window
         self.ui = WindowTemplate()
         self.ui.setupUi(self)
-        self.ui.checkBox_ch1_enabled.stateChanged.connect(self.channel1_toggle)
-        self.ui.checkBox_ch2_enabled.stateChanged.connect(self.channel2_toggle)
-        self.ui.checkBox_ch3_enabled.stateChanged.connect(self.channel3_toggle)
-        self.ui.checkBox_ch4_enabled.stateChanged.connect(self.channel4_toggle)
-        self.ui.checkBox_ch5_enabled.stateChanged.connect(self.channel5_toggle)
-        self.ui.checkBox_ch6_enabled.stateChanged.connect(self.channel6_toggle)
-        self.ui.checkBox_ch7_enabled.stateChanged.connect(self.channel7_toggle)
-        self.ui.checkBox_ch8_enabled.stateChanged.connect(self.channel8_toggle)
 
-        self.ui.comboBox_ch1_gain.activated.connect(self.channel1_gain)
-        self.ui.comboBox_ch2_gain.activated.connect(self.channel2_gain)
-        self.ui.comboBox_ch3_gain.activated.connect(self.channel3_gain)
-        self.ui.comboBox_ch4_gain.activated.connect(self.channel4_gain)
-        self.ui.comboBox_ch5_gain.activated.connect(self.channel5_gain)
-        self.ui.comboBox_ch6_gain.activated.connect(self.channel6_gain)
-        self.ui.comboBox_ch7_gain.activated.connect(self.channel7_gain)
-        self.ui.comboBox_ch8_gain.activated.connect(self.channel8_gain)
+        self.checkbox_ch_enabled = [ self.ui.checkBox_ch1_enabled,
+                                     self.ui.checkBox_ch2_enabled,
+                                     self.ui.checkBox_ch3_enabled,
+                                     self.ui.checkBox_ch4_enabled,
+                                     self.ui.checkBox_ch5_enabled,
+                                     self.ui.checkBox_ch6_enabled,
+                                     self.ui.checkBox_ch7_enabled,
+                                     self.ui.checkBox_ch8_enabled ]
 
         self.combobox_gain = [ self.ui.comboBox_ch1_gain,
-                                self.ui.comboBox_ch2_gain,
-                                self.ui.comboBox_ch3_gain,
-                                self.ui.comboBox_ch4_gain,
-                                self.ui.comboBox_ch5_gain,
-                                self.ui.comboBox_ch6_gain,
-                                self.ui.comboBox_ch7_gain,
-                                self.ui.comboBox_ch8_gain]
+                               self.ui.comboBox_ch2_gain,
+                               self.ui.comboBox_ch3_gain,
+                               self.ui.comboBox_ch4_gain,
+                               self.ui.comboBox_ch5_gain,
+                               self.ui.comboBox_ch6_gain,
+                               self.ui.comboBox_ch7_gain,
+                               self.ui.comboBox_ch8_gain ]
 
-        self.ui.checkBox_ch1_visible.stateChanged.connect(self.channel1_visible)
-        self.ui.checkBox_ch2_visible.stateChanged.connect(self.channel2_visible)
-        self.ui.checkBox_ch3_visible.stateChanged.connect(self.channel3_visible)
-        self.ui.checkBox_ch4_visible.stateChanged.connect(self.channel4_visible)
-        self.ui.checkBox_ch5_visible.stateChanged.connect(self.channel5_visible)
-        self.ui.checkBox_ch6_visible.stateChanged.connect(self.channel6_visible)
-        self.ui.checkBox_ch7_visible.stateChanged.connect(self.channel7_visible)
-        self.ui.checkBox_ch8_visible.stateChanged.connect(self.channel8_visible)
+        self.checkbox_ch_visible = [ self.ui.checkBox_ch1_visible,
+                                     self.ui.checkBox_ch2_visible,
+                                     self.ui.checkBox_ch3_visible,
+                                     self.ui.checkBox_ch4_visible,
+                                     self.ui.checkBox_ch5_visible,
+                                     self.ui.checkBox_ch6_visible,
+                                     self.ui.checkBox_ch7_visible,
+                                     self.ui.checkBox_ch8_visible ]
 
-        self.ui.pushButtonDisableAll.clicked.connect(self.disable_all)
+        self.plots = [ self.ui.plotCh1,
+                       self.ui.plotCh2,
+                       self.ui.plotCh3,
+                       self.ui.plotCh4,
+                       self.ui.plotCh5,
+                       self.ui.plotCh6,
+                       self.ui.plotCh7,
+                       self.ui.plotCh8 ]
+
+
+        for channel in range(1, 8+1):
+            self.checkbox_ch_enabled[channel-1].stateChanged.connect(partial(self.on_channel_toggle, channel))
+            self.combobox_gain[channel-1].activated.connect(partial(self.on_channel_gain, channel))
+            self.checkbox_ch_visible[channel-1].stateChanged.connect(partial(self.on_channel_visible, channel))
+
+        self.ui.pushButtonDisableAll.clicked.connect(self.on_disable_all)
+        self.ui.pushButtonEnableAll.clicked.connect(self.on_enable_all)
 
         self.ui.actionExit.triggered.connect(QtGui.qApp.quit)
 
         self.ui.actionStart.triggered.connect(self.start)
         self.ui.actionStop.triggered.connect(self.stop)
         self.ui.actionConnect.triggered.connect(self.connect)
-        self.ui.actionToggleSidebar.triggered.connect(self.toggle_sidebar)
+        self.ui.actionToggleSidebar.triggered.connect(self.on_toggle_sidebar)
         self.ui.actionQuit.triggered.connect(self.close)
+        #self.ui.actionPause.triggered.connect(self.on_pause)
         self.ui.comboBoxRefresh.currentIndexChanged.connect(self.set_refresh)
 
         # TODO do this trick with lists on all widgets
@@ -462,7 +350,7 @@ class MainWindow(TemplateBaseClass):
                 combobox.setCurrentIndex(index)
 
         self.show()
-        
+
 
     def set_refresh(self):
         refresh = self.ui.comboBoxRefresh.currentText()
@@ -470,229 +358,60 @@ class MainWindow(TemplateBaseClass):
         config.set('general', 'refresh', refresh)
 
 
-    def plot(self):
-        self.ui.plot.plot(np.random.normal(size=100), clear=True)
-
-
-    def channel1_toggle(self):
-        if self.ui.checkBox_ch1_enabled.isChecked():
-            self.eeg.set_channel(1)
-            self.ui.plotCh1.setHidden(False)
-            self.ui.checkBox_ch1_visible.setChecked(True)
+    def on_channel_toggle(self, channel):
+        if self.checkbox_ch_enabled[channel-1].isChecked():
+            self.eeg.set_channel(channel)
+            self.plots[channel-1].setHidden(False)
+            self.checkbox_ch_visible[channel-1].setChecked(True)
         else:
-            self.eeg.set_channel(1, state=False)
-            self.ui.plotCh1.setHidden(True)
-            self.ui.checkBox_ch1_visible.setChecked(False)
+            self.eeg.set_channel(channel, state=False)
+            self.plots[channel-1].setHidden(True)
+            self.checkbox_ch_visible[channel-1].setChecked(False)
 
 
-    def channel2_toggle(self):
-        if self.ui.checkBox_ch2_enabled.isChecked():
-            self.eeg.set_channel(2)
-            self.ui.plotCh2.setHidden(False)
-            self.ui.checkBox_ch2_visible.setChecked(True)
+    def on_channel_visible(self, channel):
+        if self.checkbox_ch_visible[channel-1].isChecked():
+            self.plots[channel-1].setHidden(False)
         else:
-            self.eeg.set_channel(2, state=False)
-            self.ui.plotCh2.setHidden(True)
-            self.ui.checkBox_ch2_visible.setChecked(False)
+            self.plots[channel-1].setHidden(True)
 
 
-    def channel3_toggle(self):
-        if self.ui.checkBox_ch3_enabled.isChecked():
-            self.eeg.set_channel(3)
-            self.ui.plotCh3.setHidden(False)
-            self.ui.checkBox_ch3_visible.setChecked(True)
-        else:
-            self.eeg.set_channel(3, state=False)
-            self.ui.plotCh3.setHidden(True)
-            self.ui.checkBox_ch3_visible.setChecked(False)
+    def on_channel_gain(self, channel):
+        gain = self.combobox_gain[channel-1].currentText()
+        self.eeg.set_gain(channel, int(gain))
 
 
-    def channel4_toggle(self):
-        if self.ui.checkBox_ch4_enabled.isChecked():
-            self.eeg.set_channel(4)
-            self.ui.plotCh4.setHidden(False)
-            self.ui.checkBox_ch4_visible.setChecked(True)
-        else:
-            self.eeg.set_channel(4, state=False)
-            self.ui.plotCh4.setHidden(True)
-            self.ui.checkBox_ch4_visible.setChecked(False)
+    def on_disable_all(self):
+        for channel in range(1,8+1):
+            self.checkbox_ch_visible[channel-1].setChecked(False)
+            self.checkbox_ch_enabled[channel-1].setChecked(False)
+            self.plots[channel-1].setHidden(True)
 
 
-    def channel5_toggle(self):
-        if self.ui.checkBox_ch5_enabled.isChecked():
-            self.eeg.set_channel(5)
-            self.ui.plotCh5.setHidden(False)
-            self.ui.checkBox_ch5_visible.setChecked(True)
-        else:
-            self.eeg.set_channel(5, state=False)
-            self.ui.plotCh5.setHidden(True)
-            self.ui.checkBox_ch5_visible.setChecked(False)
-
-
-    def channel6_toggle(self):
-        if self.ui.checkBox_ch6_enabled.isChecked():
-            self.eeg.set_channel(6)
-            self.ui.plotCh6.setHidden(False)
-            self.ui.checkBox_ch6_visible.setChecked(True)
-        else:
-            self.eeg.set_channel(6, state=False)
-            self.ui.plotCh6.setHidden(True)
-            self.ui.checkBox_ch6_visible.setChecked(False)
-
-
-    def channel7_toggle(self):
-        if self.ui.checkBox_ch7_enabled.isChecked():
-            self.eeg.set_channel(7)
-            self.ui.plotCh7.setHidden(False)
-            self.ui.checkBox_ch7_visible.setChecked(True)
-        else:
-            self.eeg.set_channel(7, state=False)
-            self.ui.plotCh7.setHidden(True)
-            self.ui.checkBox_ch7_visible.setChecked(False)
-
-
-    def channel8_toggle(self):
-        if self.ui.checkBox_ch8_enabled.isChecked():
-            self.eeg.set_channel(8)
-            self.ui.plotCh8.setHidden(False)
-            self.ui.checkBox_ch8_visible.setChecked(True)
-        else:
-            self.eeg.set_channel(8, state=False)
-            self.ui.plotCh8.setHidden(True)
-            self.ui.checkBox_ch8_visible.setChecked(False)
-
-
-    def channel1_visible(self):
-        if self.ui.checkBox_ch1_visible.isChecked():
-            self.ui.plotCh1.setHidden(False)
-        else:
-            self.ui.plotCh1.setHidden(True)
-
-
-    def channel2_visible(self):
-        if self.ui.checkBox_ch2_visible.isChecked():
-            self.ui.plotCh2.setHidden(False)
-        else:
-            self.ui.plotCh2.setHidden(True)
-
-
-    def channel3_visible(self):
-        if self.ui.checkBox_ch3_visible.isChecked():
-            self.ui.plotCh3.setHidden(False)
-        else:
-            self.ui.plotCh3.setHidden(True)
-
-
-    def channel4_visible(self):
-        if self.ui.checkBox_ch4_visible.isChecked():
-            self.ui.plotCh4.setHidden(False)
-        else:
-            self.ui.plotCh4.setHidden(True)
-
-
-    def channel5_visible(self):
-        if self.ui.checkBox_ch5_visible.isChecked():
-            self.ui.plotCh5.setHidden(False)
-        else:
-            self.ui.plotCh5.setHidden(True)
-
-
-    def channel6_visible(self):
-        if self.ui.checkBox_ch6_visible.isChecked():
-            self.ui.plotCh6.setHidden(False)
-        else:
-            self.ui.plotCh6.setHidden(True)
-
-
-    def channel7_visible(self):
-        if self.ui.checkBox_ch7_visible.isChecked():
-            self.ui.plotCh7.setHidden(False)
-        else:
-            self.ui.plotCh7.setHidden(True)
-
-
-    def channel8_visible(self):
-        if self.ui.checkBox_ch8_visible.isChecked():
-            self.ui.plotCh8.setHidden(False)
-        else:
-            self.ui.plotCh8.setHidden(True)
-
-
-    def channel1_gain(self):
-        gain = self.ui.comboBox_ch1_gain.currentText()
-        self.eeg.set_gain(1, gain)
-
-
-    def channel2_gain(self):
-        gain = self.ui.comboBox_ch2_gain.currentText()
-        self.eeg.set_gain(2, gain)
-
-
-    def channel3_gain(self):
-        gain = self.ui.comboBox_ch3_gain.currentText()
-        self.eeg.set_gain(3, gain)
-
-
-    def channel4_gain(self):
-        gain = self.ui.comboBox_ch4_gain.currentText()
-        self.eeg.set_gain(4, gain)
-
-
-    def channel5_gain(self):
-        gain = self.ui.comboBox_ch5_gain.currentText()
-        self.eeg.set_gain(5, gain)
-
-
-    def channel6_gain(self):
-        gain = self.ui.comboBox_ch6_gain.currentText()
-        self.eeg.set_gain(6, gain)
-
-
-    def channel7_gain(self):
-        gain = self.ui.comboBox_ch7_gain.currentText()
-        self.eeg.set_gain(7, gain)
-
-
-    def channel8_gain(self):
-        gain = self.ui.comboBox_ch8_gain.currentText()
-        self.eeg.set_gain(8, gain)
-
-
-    def disable_all(self):
-        self.ui.checkBox_ch1_visible.setChecked(False)
-        self.ui.checkBox_ch1_enabled.setChecked(False)
-        self.ui.plotCh1.setHidden(True)
-
-        self.ui.checkBox_ch2_visible.setChecked(False)
-        self.ui.checkBox_ch2_enabled.setChecked(False)
-        self.ui.plotCh2.setHidden(True)
-
-        self.ui.checkBox_ch3_visible.setChecked(False)
-        self.ui.checkBox_ch3_enabled.setChecked(False)
-        self.ui.plotCh3.setHidden(True)
-
-        self.ui.checkBox_ch4_visible.setChecked(False)
-        self.ui.checkBox_ch4_enabled.setChecked(False)
-        self.ui.plotCh4.setHidden(True)
-
-        self.ui.checkBox_ch5_visible.setChecked(False)
-        self.ui.checkBox_ch5_enabled.setChecked(False)
-        self.ui.plotCh5.setHidden(True)
-
-        self.ui.checkBox_ch6_visible.setChecked(False)
-        self.ui.checkBox_ch6_enabled.setChecked(False)
-        self.ui.plotCh6.setHidden(True)
-
-        self.ui.checkBox_ch7_visible.setChecked(False)
-        self.ui.checkBox_ch7_enabled.setChecked(False)
-        self.ui.plotCh7.setHidden(True)
-
-        self.ui.checkBox_ch8_visible.setChecked(False)
-        self.ui.checkBox_ch8_enabled.setChecked(False)
-        self.ui.plotCh8.setHidden(True)
+    def on_enable_all(self):
+        for channel in range(1,8+1):
+            self.checkbox_ch_visible[channel-1].setChecked(True)
+            self.checkbox_ch_enabled[channel-1].setChecked(True)
+            self.plots[channel-1].setHidden(False)
 
 
     def start(self):
+        if self.plotting and not self.paused:
+            for thread in self.threads:
+                thread.pause()
+                self.eeg.send_stop()
+                self.paused = True
+            return
+        elif self.plotting and self.paused:
+            for thread in self.threads:
+                self.eeg.send_start()
+                thread.pause()
+                self.paused = False
+            return
+
+        self.plotting = True
+
+        self.ui.statusbar.showMessage('start')
         print('start')
         # Clear all plots
         for channel in range(1,8+1): self.clear_plot(channel)
@@ -711,117 +430,51 @@ class MainWindow(TemplateBaseClass):
         plot_thread.start()
         self.threads.append(plot_thread)
 
-        plot_thread.sig_update_plot1.connect(self.on_update_plot1)
-        plot_thread.sig_update_plot2.connect(self.on_update_plot2)
-        plot_thread.sig_update_plot3.connect(self.on_update_plot3)
-        plot_thread.sig_update_plot4.connect(self.on_update_plot4)
-        plot_thread.sig_update_plot5.connect(self.on_update_plot5)
-        plot_thread.sig_update_plot6.connect(self.on_update_plot6)
-        plot_thread.sig_update_plot7.connect(self.on_update_plot7)
-        plot_thread.sig_update_plot8.connect(self.on_update_plot8)
-        plot_thread.sig_update_position1.connect(self.on_update_position1)
-        plot_thread.sig_update_position2.connect(self.on_update_position2)
-        plot_thread.sig_update_position3.connect(self.on_update_position3)
-        plot_thread.sig_update_position4.connect(self.on_update_position4)
-        plot_thread.sig_update_position5.connect(self.on_update_position5)
-        plot_thread.sig_update_position6.connect(self.on_update_position6)
-        plot_thread.sig_update_position7.connect(self.on_update_position7)
-        plot_thread.sig_update_position8.connect(self.on_update_position8)
-        
+        self.plot_update = [ plot_thread.sig_update_plot1,
+                             plot_thread.sig_update_plot2,
+                             plot_thread.sig_update_plot3,
+                             plot_thread.sig_update_plot4,
+                             plot_thread.sig_update_plot5,
+                             plot_thread.sig_update_plot6,
+                             plot_thread.sig_update_plot7,
+                             plot_thread.sig_update_plot8 ]
+
+        self.update_position = [ plot_thread.sig_update_position1,
+                                 plot_thread.sig_update_position2,
+                                 plot_thread.sig_update_position3,
+                                 plot_thread.sig_update_position4,
+                                 plot_thread.sig_update_position5,
+                                 plot_thread.sig_update_position6,
+                                 plot_thread.sig_update_position7,
+                                 plot_thread.sig_update_position8 ]
+
         for channel in range(1,8+1):
-            if config.get('channel{0}'.format(str(channel)), 'state') == 'on':
-                self.setup_plot(channel)
+            self.plot_update[channel-1].connect(partial(self.on_update_plot, channel))
+            self.update_position[channel-1].connect(partial(self.on_update_position, channel))
+        
+        self.setup_plots()
 
 
-
-    def setup_plot(self, channel):
+    def setup_plots(self):
         # Must be set before creating any widgets
         pg.setConfigOption('background', 0.1)
 
-        if channel == 1:
-            # Setup plots and curves
-            self.ui.plotCh1.setRange(xRange=[-1000, 0])
-            self.ui.plotCh1.setLimits(xMax=0)
-            self.ui.plotCh1.setClipToView(True)
-            self.ui.plotCh1.setDownsampling(mode='peak')
-            self.ui.plotCh1.showGrid(x=True, y=True)
-            self.curves[1] = self.ui.plotCh1.plot(pen='b')
-        elif channel == 2:
-            # Setup plots and curves
-            self.ui.plotCh2.setRange(xRange=[-1000, 0])
-            self.ui.plotCh2.setLimits(xMax=0)
-            self.ui.plotCh2.setClipToView(True)
-            self.ui.plotCh2.setDownsampling(mode='peak')
-            self.ui.plotCh2.showGrid(x=True, y=True)
-            self.curves[2] = self.ui.plotCh2.plot(pen='b')
-        elif channel == 3:
-            # Setup plots and curves
-            self.ui.plotCh3.setRange(xRange=[-1000, 0])
-            self.ui.plotCh3.setLimits(xMax=0)
-            self.ui.plotCh3.setClipToView(True)
-            self.ui.plotCh3.setDownsampling(mode='peak')
-            self.ui.plotCh3.showGrid(x=True, y=True)
-            self.curves[3] = self.ui.plotCh3.plot(pen='b')
-        elif channel == 4:
-            # Setup plots and curves
-            self.ui.plotCh4.setRange(xRange=[-1000, 0])
-            self.ui.plotCh4.setLimits(xMax=0)
-            self.ui.plotCh4.setClipToView(True)
-            self.ui.plotCh4.setDownsampling(mode='peak')
-            self.ui.plotCh4.showGrid(x=True, y=True)
-            self.curves[4] = self.ui.plotCh4.plot(pen='b')
-        elif channel == 5:
-            # Setup plots and curves
-            self.ui.plotCh5.setRange(xRange=[-1000, 0])
-            self.ui.plotCh5.setLimits(xMax=0)
-            self.ui.plotCh5.setClipToView(True)
-            self.ui.plotCh5.setDownsampling(mode='peak')
-            self.ui.plotCh5.showGrid(x=True, y=True)
-            self.curves[5] = self.ui.plotCh5.plot(pen='b')
-        elif channel == 6:
-            # Setup plots and curves
-            self.ui.plotCh6.setRange(xRange=[-1000, 0])
-            self.ui.plotCh6.setLimits(xMax=0)
-            self.ui.plotCh6.setClipToView(True)
-            self.ui.plotCh6.setDownsampling(mode='peak')
-            self.ui.plotCh6.showGrid(x=True, y=True)
-            self.curves[6] = self.ui.plotCh6.plot(pen='b')
-        elif channel == 7:
-            # Setup plots and curves
-            self.ui.plotCh7.setRange(xRange=[-1000, 0])
-            self.ui.plotCh7.setLimits(xMax=0)
-            self.ui.plotCh7.setClipToView(True)
-            self.ui.plotCh7.setDownsampling(mode='peak')
-            self.ui.plotCh7.showGrid(x=True, y=True)
-            self.curves[7] = self.ui.plotCh7.plot(pen='b')
-        elif channel == 8:
-            # Setup plots and curves
-            self.ui.plotCh8.setRange(xRange=[-1000, 0])
-            self.ui.plotCh8.setLimits(xMax=0)
-            self.ui.plotCh8.setClipToView(True)
-            self.ui.plotCh8.setDownsampling(mode='peak')
-            self.ui.plotCh8.showGrid(x=True, y=True)
-            self.curves[8] = self.ui.plotCh8.plot(pen='b')
+        for channel in range(1,8+1):
+            self.plots[channel-1].setRange(xRange=[-1000, 0])
+            self.plots[channel-1].setLimits(xMax=0)
+            self.plots[channel-1].setClipToView(True)
+            self.plots[channel-1].setDownsampling(mode='peak')
+            self.plots[channel-1].showGrid(x=True, y=True)
+            #self.plots[channel-1].hideAxis('bottom')
+            self.curves[channel] = self.plots[channel-1].plot(pen=channel)
 
-# NOTE set position might be the problem due to a timing issue
-# make signals for all plots from one thread
 
-    def on_update_plot1(self, data): self.curves[1].setData(data)
-    def on_update_plot2(self, data): self.curves[2].setData(data)
-    def on_update_plot3(self, data): self.curves[3].setData(data)
-    def on_update_plot4(self, data): self.curves[4].setData(data)
-    def on_update_plot5(self, data): self.curves[5].setData(data)
-    def on_update_plot6(self, data): self.curves[6].setData(data)
-    def on_update_plot7(self, data): self.curves[7].setData(data)
-    def on_update_plot8(self, data): self.curves[8].setData(data)
-    def on_update_position1(self, position): self.curves[1].setPos(position, 0)
-    def on_update_position2(self, position): self.curves[2].setPos(position, 0)
-    def on_update_position3(self, position): self.curves[3].setPos(position, 0)
-    def on_update_position4(self, position): self.curves[4].setPos(position, 0)
-    def on_update_position5(self, position): self.curves[5].setPos(position, 0)
-    def on_update_position6(self, position): self.curves[6].setPos(position, 0)
-    def on_update_position7(self, position): self.curves[7].setPos(position, 0)
-    def on_update_position8(self, position): self.curves[8].setPos(position, 0)
+    def on_update_plot(self, channel, data):
+        self.curves[channel].setData(data)
+
+
+    def on_update_position(self, channel, position):
+        self.curves[channel].setPos(position, 0)
 
 
     def stop(self):
@@ -831,6 +484,7 @@ class MainWindow(TemplateBaseClass):
             thread.stop()
 
         self.eeg.disconnect()
+        self.plotting = False
 
 
     def connect(self):
@@ -838,17 +492,10 @@ class MainWindow(TemplateBaseClass):
 
 
     def clear_plot(self, channel):
-        if channel == 1: self.ui.plotCh1.clear()
-        if channel == 2: self.ui.plotCh2.clear()
-        if channel == 3: self.ui.plotCh3.clear()
-        if channel == 4: self.ui.plotCh4.clear()
-        if channel == 5: self.ui.plotCh5.clear()
-        if channel == 6: self.ui.plotCh6.clear()
-        if channel == 7: self.ui.plotCh7.clear()
-        if channel == 8: self.ui.plotCh8.clear()
+        self.plots[channel-1].clear()
 
 
-    def toggle_sidebar(self):
+    def on_toggle_sidebar(self):
         if self.ui.dockWidgetChannelSettings.isHidden():
             self.ui.dockWidgetChannelSettings.setHidden(False)
             self.ui.dockWidgetVisibleChannels.setHidden(False)

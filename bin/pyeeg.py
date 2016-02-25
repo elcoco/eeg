@@ -560,16 +560,6 @@ class ADS1299(object):
         return return_list
 
 
-
-    def get_reg_bak(self, reg):
-        ret_reg = hex(self.registers[reg])
-        v= ''.join(self.values[reg])
-        #v= hex(int(''.join(self.values[reg]), 2))
-        #value = '0x{:02x}'.format(v)
-        print(ba.hexlify(v.encode()))
-        return ret_reg,v
-
-
     def set_reg(self, reg, bit, value):
         self.values[reg][bit-1] = str(value)
         return self.get_reg(reg)
@@ -901,9 +891,19 @@ class EEG(object):
                     return False
                 data = Data(self.config)
                 data.set_channel(channel)
-                data.set_data(d)
+                data.set_data(self.map_data(d, -8388607, 8388607, -0.3, 0.3))
+                #data.display()
                 self.datalist.add_data(data)
         return True
+
+
+    def map_data(self, x, in_min, in_max, out_min, out_max):
+        x = float(x)
+        in_min = float(in_min)
+        in_max = float(in_max)
+        out_min = float(out_min)
+        out_max = float(out_max)
+        return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
 
 
     def send_settings(self):
@@ -950,28 +950,6 @@ class EEG(object):
         log.info('Gain on Channel{0} is set to: {1}'.format(channel, level))
         self.config.set('channel' + str(channel), 'gain', level)
         self.ads1299.set_gain(channel, level)
-
-
-    def set_gain_old(self, level):
-        level = level.split(',')
-        level = [ int(x) for x in level ]
-        if len(level) == 2:
-            self.config.set('channel' + str(level[0]), 'gain', level[1])
-        elif len(level) == 1:
-            for channel in range(1, 8+1):
-                self.config.set('channel' + str(channel), 'gain', level[0])
-
-
-    def set_channel_old(self, channels):
-        # Set channel in Config() and ADS1299()
-        channels = channels.split(',')
-        channels = [ int(x) for x in channels ]
-
-        for channel in range(1, 8+1):
-            if channel in channels:
-                self.config.set('channel' + str(channel), 'state', 'on')
-            else:
-                self.config.set('channel' + str(channel), 'state', 'off')
 
 
     def send_start(self):
@@ -1084,20 +1062,6 @@ class EEG(object):
         log.info('Connection to server is closed')
         self.socket.close()
 
-
-        
-    def run(self):
-        self.set_config_defaults()
-        self.connect_to_server()
-
-        # Set some defaults
-        self.set_srb1()
-        self.send_srb1()
-        self.set_ref()
-        self.send_ref()
-
-        self.handle_arg()
-        self.disconnect()
 
 log = Log()
 
