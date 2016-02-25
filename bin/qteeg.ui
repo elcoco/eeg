@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>797</width>
-    <height>720</height>
+    <height>765</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -18,7 +18,7 @@
     <item>
      <widget class="QTabWidget" name="tabWidgetPlot">
       <property name="currentIndex">
-       <number>1</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="tab">
        <attribute name="title">
@@ -48,16 +48,6 @@
         </item>
         <item>
          <widget class="PlotWidget" name="plotCh8"/>
-        </item>
-       </layout>
-      </widget>
-      <widget class="QWidget" name="tab_2">
-       <attribute name="title">
-        <string>Page</string>
-       </attribute>
-       <layout class="QVBoxLayout" name="verticalLayout_15">
-        <item>
-         <widget class="PlotWidget" name="graphicsView"/>
         </item>
        </layout>
       </widget>
@@ -1068,7 +1058,7 @@
   <action name="actionPause">
    <property name="icon">
     <iconset>
-     <normaloff>icons/media-playback-pause.svg</normaloff>icons/media-playback-pause.svg</iconset>
+     <normaloff>../../.designer/backup/icons/media-playback-pause.svg</normaloff>../../.designer/backup/icons/media-playback-pause.svg</iconset>
    </property>
    <property name="text">
     <string>Pause</string>

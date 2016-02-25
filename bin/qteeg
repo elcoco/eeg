@@ -260,21 +260,21 @@ class PlotThread(QtCore.QThread, StoppableThread):
 
 
 class ImportPlot(object):
-    def __init__(self, filename):
+    def __init__(self):
         self.xs = []
         self.ys = []
-        self.filename = filename
 
 
-    def import_file(self):
-        datas = self.get_file(self.filename) 
+    def import_file(self, filename):
+        datas = self.get_file(filename) 
+        first = True
         for data in datas:
-            items = data.split(',')
-            self.xs.append(items[0])
-            self.ys.append(items[1])
+            if not first:
+                items = data.split(',')
+                self.xs.append(float(items[0]))
+                self.ys.append(float(items[1]))
+            first = False
 
-        self.xs = self.xs[1:]
-        self.ys = self.ys[1:]
         return self.xs, self.ys
 
 
@@ -304,6 +304,18 @@ class ImportPlot(object):
         for sanitize in sanitize_list:
             data = data.strip(sanitize)
         return data
+
+
+
+class PlotTab(TemplateBaseClass):
+    def __init__(self):
+        TemplateBaseClass.__init__(self)
+
+        # Create the main window
+        self.ui = WindowTemplate()
+        self.ui.setupUi(self)
+        self.show()
+
 
 
 class MainWindow(TemplateBaseClass):  
@@ -542,20 +554,18 @@ class MainWindow(TemplateBaseClass):
 
     def on_import_plot(self):
         filename = QtGui.QFileDialog.getOpenFileName(self, 'Open file', os.getenv("HOME"))
-        plot = ImportPlot(filename)
-        xs,ys = plot.import_file()
-        self.show_plot(xs,ys)
+        tabname = os.path.basename(filename).split('.')[0]
+        if filename:
+            plot = ImportPlot()
+            xs,ys = plot.import_file(filename)
 
-
-    def show_plot(self, xs, ys):
-        # Display imported plots
-        # create tab with plot widget in it
-        # plot the data
-        # TODO find a way of creating dynamic tabs with plotwidget innit
-        tab = QWidget()
-        self.ui.tabWidgetPlot.addTab(tab, 'plot')
-
-
+            tab = pg.GraphicsWindow()
+            plot = tab.addPlot()
+            plot.showGrid(x=True, y=True)
+            xs = np.array(xs)
+            ys = np.array(ys)
+            self.ui.tabWidgetPlot.addTab(tab, tabname)
+            plot.plot(xs, ys, pen='g')
 
 
     def clear_plot(self, channel):
