@@ -200,6 +200,7 @@ class PlotThread(QtCore.QThread, StoppableThread):
                 plot.setup()
                 self.plots[channel] = plot
 
+
     def send(self, sig, data):
         sig.emit(data)
 
@@ -256,6 +257,53 @@ class PlotThread(QtCore.QThread, StoppableThread):
             else:
                 time.sleep(0.5)
 
+
+
+class ImportPlot(object):
+    def __init__(self, filename):
+        self.xs = []
+        self.ys = []
+        self.filename = filename
+
+
+    def import_file(self):
+        datas = self.get_file(self.filename) 
+        for data in datas:
+            items = data.split(',')
+            self.xs.append(items[0])
+            self.ys.append(items[1])
+
+        self.xs = self.xs[1:]
+        self.ys = self.ys[1:]
+        return self.xs, self.ys
+
+
+    def get_file(self, filename):
+        """ Get contents of a file and put every line in a list"""
+        contents = []
+        try:
+            f = open(filename, 'r')
+        except IOError as e:
+            if not self.quiet:
+                print('No config file found at: {0}'.format(filename))
+            return False
+
+        for line in f:
+            if line:
+                contents.append(self.sanitize(line))
+        f.close()
+
+        if contents:
+            return contents
+        return False
+
+
+    def sanitize(self, data, extra_opts = []):
+        """ Clean variable from newlines, leading/trailing spaces and other stuff """
+        sanitize_list = [' ', '\'', '\"', '\n'] + extra_opts
+        for sanitize in sanitize_list:
+            data = data.strip(sanitize)
+        return data
 
 
 class MainWindow(TemplateBaseClass):  
@@ -328,6 +376,7 @@ class MainWindow(TemplateBaseClass):
 
         self.ui.actionExit.triggered.connect(QtGui.qApp.quit)
 
+        self.ui.actionImport_plot.triggered.connect(self.on_import_plot)
         self.ui.actionStart.triggered.connect(self.start)
         self.ui.actionStop.triggered.connect(self.stop)
         self.ui.actionConnect.triggered.connect(self.connect)
@@ -489,6 +538,24 @@ class MainWindow(TemplateBaseClass):
 
     def connect(self):
         self.eeg.connect()
+
+
+    def on_import_plot(self):
+        filename = QtGui.QFileDialog.getOpenFileName(self, 'Open file', os.getenv("HOME"))
+        plot = ImportPlot(filename)
+        xs,ys = plot.import_file()
+        self.show_plot(xs,ys)
+
+
+    def show_plot(self, xs, ys):
+        # Display imported plots
+        # create tab with plot widget in it
+        # plot the data
+        # TODO find a way of creating dynamic tabs with plotwidget innit
+        tab = QWidget()
+        self.ui.tabWidgetPlot.addTab(tab, 'plot')
+
+
 
 
     def clear_plot(self, channel):

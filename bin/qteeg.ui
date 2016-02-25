@@ -18,7 +18,7 @@
     <item>
      <widget class="QTabWidget" name="tabWidgetPlot">
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="tab">
        <attribute name="title">
@@ -48,6 +48,16 @@
         </item>
         <item>
          <widget class="PlotWidget" name="plotCh8"/>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tab_2">
+       <attribute name="title">
+        <string>Page</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_15">
+        <item>
+         <widget class="PlotWidget" name="graphicsView"/>
         </item>
        </layout>
       </widget>
@@ -759,7 +769,7 @@
    <attribute name="toolBarBreak">
     <bool>false</bool>
    </attribute>
-   <addaction name="actionOpen_plot"/>
+   <addaction name="actionImport_plot"/>
    <addaction name="actionStart"/>
    <addaction name="actionStop"/>
    <addaction name="actionToggleSidebar"/>
@@ -1073,13 +1083,13 @@
     <string>Settings</string>
    </property>
   </action>
-  <action name="actionOpen_plot">
+  <action name="actionImport_plot">
    <property name="icon">
     <iconset>
      <normaloff>icons/document-open.svg</normaloff>icons/document-open.svg</iconset>
    </property>
    <property name="text">
-    <string>Open plot</string>
+    <string>Import plot</string>
    </property>
   </action>
  </widget>
