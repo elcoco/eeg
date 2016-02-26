@@ -17,6 +17,7 @@ import threading
 
 import datetime
 import socket
+from socket import error as socket_error
 import select
 import time
 
@@ -51,6 +52,8 @@ class StoppableThread(object):
 
 
 class GetDataThread(QtCore.QThread, StoppableThread):
+    sig_get_data = QtCore.pyqtSignal(object)
+
     def __init__(self, eeg):
         QtCore.QThread.__init__(self)
         StoppableThread.__init__(self)
@@ -60,7 +63,10 @@ class GetDataThread(QtCore.QThread, StoppableThread):
     def run(self):
         while not self.stopped:
             if not self.paused:
-                self.eeg.get_data()
+                #self.eeg.get_data()
+                if not self.eeg.get_data():
+                    self.sig_get_data.emit(False)
+                    self.stop()
             else:
                 time.sleep(0.5)
 
@@ -346,6 +352,7 @@ class MainWindow(TemplateBaseClass):
         # keep track of application state (play/pause)
         self.plotting = False
         self.paused = False
+        self.has_run = False
 
         # Some settings
         self.eeg.set_config_defaults()
@@ -488,52 +495,60 @@ class MainWindow(TemplateBaseClass):
 
 
     def on_save_all_plots(self):
-        dirname = QtGui.QFileDialog.getExistingDirectory(self, 'Select Directory', os.getenv("HOME", ))
-        if dirname:
-            for channel in range(1,8+1):
-                if config.get('channel{0}'.format(str(channel)), 'state') == 'on':
-                    self.save_channel(dirname, channel)
+        if self.has_run:
+            dirname = QtGui.QFileDialog.getExistingDirectory(self, 'Select Directory', os.getenv("HOME", ))
+            if dirname:
+                for channel in range(1,8+1):
+                    if config.get('channel{0}'.format(str(channel)), 'state') == 'on':
+                        self.save_channel(dirname, channel)
+                self.ui.statusbar.showMessage('Saved all channels to: {0}'.format(dirname))
+        else:
+            self.ui.statusbar.showMessage('Can\'t save, no data yet')
+
 
 
     def on_save_channel(self, channel):
-        dirname = QtGui.QFileDialog.getExistingDirectory(self, 'Select Directory', os.getenv("HOME", ))
-        if dirname:
-            self.save_channel(dirname, channel, show_status=False)
-            self.ui.statusbar.showMessage('Saved all channels to: {0}/channel{1}.csv'.format(dirname,channel))
+        if self.has_run:
+            dirname = QtGui.QFileDialog.getExistingDirectory(self, 'Select Directory', os.getenv("HOME", ))
+            if dirname:
+                self.save_channel(dirname, channel)
+                self.ui.statusbar.showMessage('Saved channel to: {0}/channel{1}.csv'.format(dirname,channel))
+        else:
+            self.ui.statusbar.showMessage('Can\'t save, no data yet')
 
 
-    def save_channel(self, dirname, channel, show_status=True):
+    def save_channel(self, dirname, channel):
         # TODO Save all channels from data and not from exporter (exporter limits to view)
         exporter = pg.exporters.CSVExporter(self.plots[channel-1].plotItem)
         exporter.export('{0}/channel{1}.csv'.format(dirname,channel))
-        if show_status:
-            self.ui.statusbar.showMessage('Saved channel to: {0}/channel{1}.csv'.format(dirname,channel))
 
 
     def on_start(self):
         if self.plotting and not self.paused:
             for thread in self.threads:
+                self.ui.statusbar.showMessage('Paused')
                 thread.pause()
                 self.eeg.send_stop()
                 self.paused = True
             return
         elif self.plotting and self.paused:
             for thread in self.threads:
+                self.ui.statusbar.showMessage('Running')
                 self.eeg.send_start()
                 thread.pause()
                 self.paused = False
             return
 
-        self.plotting = True
-
-        self.ui.statusbar.showMessage('start')
-
         # Clear all plots
         for channel in range(1,8+1): self.clear_plot(channel)
             
-        self.connect()
-        #if not self.connect():
-        #    return
+        #self.connect()
+        if not self.connect():
+            return False
+
+        self.ui.statusbar.showMessage('Running')
+        self.plotting = True
+        self.has_run = True
 
         self.curves = {}
 
@@ -567,6 +582,8 @@ class MainWindow(TemplateBaseClass):
                                  plot_thread.sig_update_position7,
                                  plot_thread.sig_update_position8 ]
 
+        data_thread.sig_get_data.connect(self.on_no_data)
+
         for channel in range(1,8+1):
             self.plot_update[channel-1].connect(partial(self.on_update_plot, channel))
             self.update_position[channel-1].connect(partial(self.on_update_position, channel))
@@ -596,18 +613,34 @@ class MainWindow(TemplateBaseClass):
         self.curves[channel].setPos(position, 0)
 
 
-    def on_stop(self):
-        print('stop')
-        self.eeg.send_stop()
-        for thread in self.threads:
-            thread.stop()
+    def on_no_data(self, data):
+        # This method is called if there is a connection error in the data thread
+        # This if is needed because there will also be an error collecting data if the stop button is pressed
+        if self.plotting:
+            print('No data')
+            self.ui.statusbar.showMessage('There was a problem connecting to the server')
+            self.on_stop(show_message=False)
 
-        self.eeg.disconnect()
-        self.plotting = False
+
+    def on_stop(self, show_message=True):
+        if self.plotting:
+            if show_message:
+                self.ui.statusbar.showMessage('Stopped')
+            self.eeg.send_stop()
+            for thread in self.threads:
+                thread.stop()
+
+            self.eeg.disconnect()
+            self.plotting = False
 
 
     def connect(self):
-        self.eeg.connect()
+        if self.eeg.connect():
+            self.ui.statusbar.showMessage('Connected to server')
+            return True
+        else:
+            self.ui.statusbar.showMessage('Could not connect to server')
+            return False
 
 
     def on_import_plot(self):
@@ -619,7 +652,6 @@ class MainWindow(TemplateBaseClass):
 
             plot = PlotTab(tabname, xs, ys)
             plot.show(self.ui.tabWidgetPlot)
-
 
 
     def on_close_tab(self, currentIndex):

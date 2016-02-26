@@ -712,22 +712,23 @@ class DataList(object):
 
 
 class Socket(object):
-    def __init__(self, host, port):
+    def connect(self, host, port):
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             log.info('Client socket created')
-        except socket.error:
-            log.error('Failed to create client socket')
-            sys.exit()
+        except socket.error as e:
+            log.error('Failed to create client socket: {0}'.format(e))
+            return False
         #self.socket = socket.socket()
-        #self.socket.settimeout(20)
+        self.socket.settimeout(5)
         try:
             self.socket.connect((host, port))
             log.info('Connected to server')
-        except socket.error:
-            log.error('Failed to connect to server')
-            sys.exit()
+            return True
+        except socket.error as e:
+            log.error('Failed to connect to server: {0}'.format(e))
+            return False
 
 
     def send(self, data, prefix=True):
@@ -741,9 +742,13 @@ class Socket(object):
             self.socket.sendall(data_bytes)
             log.info('<<< {0}'.format(data))
             return True
-        except:
-            log.error('Failed to send data')
+        except socket.error as e:
+            #log.error('Failed to send data: {0}'.format(e))
             return False
+
+
+    def is_alive(self):
+        pass
 
 
     def receive(self, bits):
@@ -751,9 +756,9 @@ class Socket(object):
         try:
             data = self.socket.recv(int(bits)).decode('utf-8')
             return self.sanitize(data)
-        except:
-            log.error('Failed to receive data')
-        return False
+        except socket.error as e:
+            #log.error('Failed to receive data: {0}'.format(e))
+            return False
 
 
     def sanitize(self, data):
@@ -853,8 +858,14 @@ class EEG(object):
             if length:
                 if length[0] == '#':
                     length = length[1:]
+                    skipped = 0
                     break
-            skipped += 1
+            else:
+                skipped += 1
+
+            if skipped >= 3:
+                return False
+
         if self.test(length):
             # then get the full frame 
             data = self.socket.receive(length)
@@ -863,11 +874,10 @@ class EEG(object):
                     return True
             else:
                 log.error('Error getting data, no data')
+                return False
         else:
             log.error('Error getting data, length is corrupted: {0}'.format(length))
-
-        log.error('An error occured while transfer')
-        return False
+            return
 
 
     def get_timestamp(self):
@@ -909,8 +919,6 @@ class EEG(object):
     def send_settings(self):
         for reg in self.ads1299.get_all_regs():
             self.socket.send('WREG,{0},{1}'.format(reg[0], reg[1]))
-
-
 
 
     def set_srb1(self, state=True):
@@ -1055,7 +1063,8 @@ class EEG(object):
 
     def connect(self):
         # Create socket
-        self.socket = Socket(self.config.get('server', 'address'), self.config.get('server', 'port'))
+        self.socket = Socket()
+        return self.socket.connect(self.config.get('server', 'address'), self.config.get('server', 'port'))
 
 
     def disconnect(self):
