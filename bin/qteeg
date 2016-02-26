@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 import pyqtgraph as pg
+import pyqtgraph.exporters
 from pyqtgraph.Qt import QtCore, QtGui
 import numpy as np
 import os
@@ -321,11 +322,9 @@ class PlotTab(object):
         self.plot.plot(xs, ys, pen='g')
 
 
-    def show(self, widget):
-        self.widget = widget
-        self.widget.setTabsClosable(True)
-        self.widget.tabCloseRequested.connect(self.close_tab)
-        self.widget.addTab(self.tab, self.tabname)
+    def show(self, tab_widget):
+        self.tab_widget = tab_widget
+        self.tab_widget.addTab(self.tab, self.tabname)
 
 
     def close_tab(self, currentIndex):
@@ -357,6 +356,7 @@ class MainWindow(TemplateBaseClass):
         self.ui = WindowTemplate()
         self.ui.setupUi(self)
 
+        # Put all widgets in lists so it's easyer to itter through them
         self.checkbox_ch_enabled = [ self.ui.checkBox_ch1_enabled,
                                      self.ui.checkBox_ch2_enabled,
                                      self.ui.checkBox_ch3_enabled,
@@ -384,6 +384,15 @@ class MainWindow(TemplateBaseClass):
                                      self.ui.checkBox_ch7_visible,
                                      self.ui.checkBox_ch8_visible ]
 
+        self.pushbutton_ch_save = [ self.ui.pushButtonSave1,
+                                    self.ui.pushButtonSave2,
+                                    self.ui.pushButtonSave3,
+                                    self.ui.pushButtonSave4,
+                                    self.ui.pushButtonSave5,
+                                    self.ui.pushButtonSave6,
+                                    self.ui.pushButtonSave7,
+                                    self.ui.pushButtonSave8 ]
+
         self.plots = [ self.ui.plotCh1,
                        self.ui.plotCh2,
                        self.ui.plotCh3,
@@ -394,26 +403,27 @@ class MainWindow(TemplateBaseClass):
                        self.ui.plotCh8 ]
 
 
+        # Connect signals/slots
         for channel in range(1, 8+1):
             self.checkbox_ch_enabled[channel-1].stateChanged.connect(partial(self.on_channel_toggle, channel))
             self.combobox_gain[channel-1].activated.connect(partial(self.on_channel_gain, channel))
             self.checkbox_ch_visible[channel-1].stateChanged.connect(partial(self.on_channel_visible, channel))
+            self.pushbutton_ch_save[channel-1].clicked.connect(partial(self.on_save_channel, channel))
 
         self.ui.pushButtonDisableAll.clicked.connect(self.on_disable_all)
         self.ui.pushButtonEnableAll.clicked.connect(self.on_enable_all)
 
+        self.ui.actionSave_all_plots.triggered.connect(self.on_save_all_plots)
         self.ui.actionExit.triggered.connect(QtGui.qApp.quit)
-
         self.ui.actionImport_plot.triggered.connect(self.on_import_plot)
         self.ui.actionStart.triggered.connect(self.on_start)
         self.ui.actionStop.triggered.connect(self.on_stop)
         self.ui.actionConnect.triggered.connect(self.connect)
         self.ui.actionToggleSidebar.triggered.connect(self.on_toggle_sidebar)
         self.ui.actionQuit.triggered.connect(self.close)
-        #self.ui.actionPause.triggered.connect(self.on_pause)
         self.ui.comboBoxRefresh.currentIndexChanged.connect(self.set_refresh)
+        self.ui.tabWidgetPlot.tabCloseRequested.connect(self.on_close_tab)
 
-        # TODO do this trick with lists on all widgets
         # Set default states of checkboxes/comboboxes
         index = self.ui.comboBoxRefresh.findText(str(config.get('general', 'refresh')), QtCore.Qt.MatchFixedString)
         if index >= 0:
@@ -425,6 +435,11 @@ class MainWindow(TemplateBaseClass):
             index = combobox.findText(str(config.get('channel{0}'.format(str(channel)), 'gain')), QtCore.Qt.MatchFixedString)
             if index >= 0:
                 combobox.setCurrentIndex(index)
+
+        # Setup tabs
+        self.ui.tabWidgetPlot.setTabsClosable(True)
+        self.ui.tabWidgetPlot.setMovable(True)
+        self.ui.tabWidgetPlot.tabBar().setTabButton(0, QtGui.QTabBar.RightSide,None)
 
         self.show()
 
@@ -472,6 +487,29 @@ class MainWindow(TemplateBaseClass):
             self.plots[channel-1].setHidden(False)
 
 
+    def on_save_all_plots(self):
+        dirname = QtGui.QFileDialog.getExistingDirectory(self, 'Select Directory', os.getenv("HOME", ))
+        if dirname:
+            for channel in range(1,8+1):
+                if config.get('channel{0}'.format(str(channel)), 'state') == 'on':
+                    self.save_channel(dirname, channel)
+
+
+    def on_save_channel(self, channel):
+        dirname = QtGui.QFileDialog.getExistingDirectory(self, 'Select Directory', os.getenv("HOME", ))
+        if dirname:
+            self.save_channel(dirname, channel, show_status=False)
+            self.ui.statusbar.showMessage('Saved all channels to: {0}/channel{1}.csv'.format(dirname,channel))
+
+
+    def save_channel(self, dirname, channel, show_status=True):
+        # TODO Save all channels from data and not from exporter (exporter limits to view)
+        exporter = pg.exporters.CSVExporter(self.plots[channel-1].plotItem)
+        exporter.export('{0}/channel{1}.csv'.format(dirname,channel))
+        if show_status:
+            self.ui.statusbar.showMessage('Saved channel to: {0}/channel{1}.csv'.format(dirname,channel))
+
+
     def on_start(self):
         if self.plotting and not self.paused:
             for thread in self.threads:
@@ -493,8 +531,9 @@ class MainWindow(TemplateBaseClass):
         # Clear all plots
         for channel in range(1,8+1): self.clear_plot(channel)
             
-        if not self.connect():
-            return
+        self.connect()
+        #if not self.connect():
+        #    return
 
         self.curves = {}
 
@@ -572,7 +611,7 @@ class MainWindow(TemplateBaseClass):
 
 
     def on_import_plot(self):
-        filenames = QtGui.QFileDialog.getOpenFileNames(self, 'Open file', os.getenv("HOME"))
+        filenames = QtGui.QFileDialog.getOpenFileNames(self, 'Open file', os.getenv("HOME"), filter='*.csv')
         for filename in filenames:
             tabname = os.path.basename(filename).split('.')[0]
             plotfile = ImportPlot()
@@ -580,6 +619,11 @@ class MainWindow(TemplateBaseClass):
 
             plot = PlotTab(tabname, xs, ys)
             plot.show(self.ui.tabWidgetPlot)
+
+
+
+    def on_close_tab(self, currentIndex):
+        self.ui.tabWidgetPlot.removeTab(currentIndex)
 
 
     def clear_plot(self, channel):

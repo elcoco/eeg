@@ -756,10 +756,6 @@ class Socket(object):
         return False
 
 
-    def is_alive(self):
-        return
-
-
     def sanitize(self, data):
         return data.strip('\n')
 
@@ -767,6 +763,42 @@ class Socket(object):
     def close(self):
         self.socket.close()
         
+
+
+class PlotThread(StoppableThread):
+    def __init__(self):
+        StoppableThread.__init__(self)
+
+
+    def setup(self):
+        self.fig = plt.figure()
+        self.ax1 = self.fig.add_subplot(1,1,1)
+
+
+    def animate(self):
+        xar = []
+        yar = []
+
+        for data in datalist.get_data_list():
+            xar.append(data.get_data())
+            yar.append(data.get_timestamp())
+        self.ax1.clear()
+        self.ax1.plot(xar,yar)
+
+
+    def plot(self):
+        self.setup()
+        ani = animation.FuncAnimation(self.fig, self.animate, interval=1000)
+        plt.show()
+        print('lkjj')
+
+
+    def run(self):
+        print('lkjj')
+        self.plot()
+        while True:
+            pass
+
 
 
 class EEG(object):
@@ -793,6 +825,16 @@ class EEG(object):
         if contents:
             return contents
         return False
+
+
+    def start_threads(self):
+        self.running_threads = []
+        self.running_threads.append(QtThread(self.config).start())
+
+
+    def stop_threads(self):
+        for thread in self.running_threads:
+            thread.stop()
 
 
     def test(self, var):
@@ -867,6 +909,8 @@ class EEG(object):
     def send_settings(self):
         for reg in self.ads1299.get_all_regs():
             self.socket.send('WREG,{0},{1}'.format(reg[0], reg[1]))
+
+
 
 
     def set_srb1(self, state=True):

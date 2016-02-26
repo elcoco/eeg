@@ -760,12 +760,14 @@
     <bool>false</bool>
    </attribute>
    <addaction name="actionImport_plot"/>
+   <addaction name="actionSave_all_plots"/>
+   <addaction name="separator"/>
    <addaction name="actionStart"/>
    <addaction name="actionStop"/>
    <addaction name="actionToggleSidebar"/>
-   <addaction name="actionQuit"/>
    <addaction name="separator"/>
    <addaction name="actionSettings"/>
+   <addaction name="actionQuit"/>
   </widget>
   <widget class="QDockWidget" name="dockWidgetVisibleChannels">
    <attribute name="dockWidgetArea">
@@ -1080,6 +1082,15 @@
    </property>
    <property name="text">
     <string>Import plot</string>
+   </property>
+  </action>
+  <action name="actionSave_all_plots">
+   <property name="icon">
+    <iconset>
+     <normaloff>icons/document-save.svg</normaloff>icons/document-save.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Save all plots</string>
    </property>
   </action>
  </widget>
