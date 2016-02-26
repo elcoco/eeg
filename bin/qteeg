@@ -556,16 +556,12 @@ class MainWindow(TemplateBaseClass):
         filename = QtGui.QFileDialog.getOpenFileName(self, 'Open file', os.getenv("HOME"))
         tabname = os.path.basename(filename).split('.')[0]
         if filename:
-            plot = ImportPlot()
-            xs,ys = plot.import_file(filename)
+            plotfile = ImportPlot()
+            xs,ys = plotfile.import_file(filename)
 
-            tab = pg.GraphicsWindow()
-            plot = tab.addPlot()
-            plot.showGrid(x=True, y=True)
-            xs = np.array(xs)
-            ys = np.array(ys)
-            self.ui.tabWidgetPlot.addTab(tab, tabname)
-            plot.plot(xs, ys, pen='g')
+            plot = PlotTab()
+            tab = plot.get_tab(xs, ys)
+            self.ui.tabwidgetplot.addtab(tab, tabname)
 
 
     def clear_plot(self, channel):
@@ -580,6 +576,20 @@ class MainWindow(TemplateBaseClass):
             self.ui.dockWidgetChannelSettings.setHidden(True)
             self.ui.dockWidgetVisibleChannels.setHidden(True)
 
+
+class PlotTab(object):
+    def __init__(self, widget):
+        self.widget = widget
+
+
+    def get_tab(self, xs, ys):
+        xs = np.array(xs)
+        ys = np.array(ys)
+
+        self.plot = self.tab.addplot()
+        self.plot.showgrid(x=True, y=True)
+        plot.plot(xs, ys, pen='g')
+        self.tab = pg.graphicswindow()
 
 win = MainWindow()
 
