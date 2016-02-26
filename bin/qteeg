@@ -307,14 +307,30 @@ class ImportPlot(object):
 
 
 
-class PlotTab(TemplateBaseClass):
-    def __init__(self):
-        TemplateBaseClass.__init__(self)
+class PlotTab(object):
+    # A class for creating a new tab with a plot in it
+    def __init__(self, tabname, xs, ys):
+        self.tabname = tabname
+        xs = np.array(xs)
+        ys = np.array(ys)
 
-        # Create the main window
-        self.ui = WindowTemplate()
-        self.ui.setupUi(self)
-        self.show()
+        self.tab = pg.GraphicsWindow()
+        self.plot = self.tab.addPlot()
+
+        self.plot.showGrid(x=True, y=True)
+        self.plot.plot(xs, ys, pen='g')
+
+
+    def show(self, widget):
+        self.widget = widget
+        self.widget.setTabsClosable(True)
+        self.widget.tabCloseRequested.connect(self.close_tab)
+        self.widget.addTab(self.tab, self.tabname)
+
+
+    def close_tab(self, currentIndex):
+        print('>>>',currentIndex,'<<<')
+        self.widget.removeTab(currentIndex)
 
 
 
@@ -389,8 +405,8 @@ class MainWindow(TemplateBaseClass):
         self.ui.actionExit.triggered.connect(QtGui.qApp.quit)
 
         self.ui.actionImport_plot.triggered.connect(self.on_import_plot)
-        self.ui.actionStart.triggered.connect(self.start)
-        self.ui.actionStop.triggered.connect(self.stop)
+        self.ui.actionStart.triggered.connect(self.on_start)
+        self.ui.actionStop.triggered.connect(self.on_stop)
         self.ui.actionConnect.triggered.connect(self.connect)
         self.ui.actionToggleSidebar.triggered.connect(self.on_toggle_sidebar)
         self.ui.actionQuit.triggered.connect(self.close)
@@ -456,7 +472,7 @@ class MainWindow(TemplateBaseClass):
             self.plots[channel-1].setHidden(False)
 
 
-    def start(self):
+    def on_start(self):
         if self.plotting and not self.paused:
             for thread in self.threads:
                 thread.pause()
@@ -473,12 +489,15 @@ class MainWindow(TemplateBaseClass):
         self.plotting = True
 
         self.ui.statusbar.showMessage('start')
-        print('start')
+
         # Clear all plots
         for channel in range(1,8+1): self.clear_plot(channel)
+            
+        if not self.connect():
+            return
 
         self.curves = {}
-        self.connect()
+
         self.eeg.send_settings()
         self.eeg.send_start()
 
@@ -538,7 +557,7 @@ class MainWindow(TemplateBaseClass):
         self.curves[channel].setPos(position, 0)
 
 
-    def stop(self):
+    def on_stop(self):
         print('stop')
         self.eeg.send_stop()
         for thread in self.threads:
@@ -553,15 +572,14 @@ class MainWindow(TemplateBaseClass):
 
 
     def on_import_plot(self):
-        filename = QtGui.QFileDialog.getOpenFileName(self, 'Open file', os.getenv("HOME"))
-        tabname = os.path.basename(filename).split('.')[0]
-        if filename:
+        filenames = QtGui.QFileDialog.getOpenFileNames(self, 'Open file', os.getenv("HOME"))
+        for filename in filenames:
+            tabname = os.path.basename(filename).split('.')[0]
             plotfile = ImportPlot()
             xs,ys = plotfile.import_file(filename)
 
-            plot = PlotTab()
-            tab = plot.get_tab(xs, ys)
-            self.ui.tabwidgetplot.addtab(tab, tabname)
+            plot = PlotTab(tabname, xs, ys)
+            plot.show(self.ui.tabWidgetPlot)
 
 
     def clear_plot(self, channel):
@@ -577,24 +595,9 @@ class MainWindow(TemplateBaseClass):
             self.ui.dockWidgetVisibleChannels.setHidden(True)
 
 
-class PlotTab(object):
-    def __init__(self, widget):
-        self.widget = widget
-
-
-    def get_tab(self, xs, ys):
-        xs = np.array(xs)
-        ys = np.array(ys)
-
-        self.plot = self.tab.addplot()
-        self.plot.showgrid(x=True, y=True)
-        plot.plot(xs, ys, pen='g')
-        self.tab = pg.graphicswindow()
 
 win = MainWindow()
 
-
-## Start Qt event loop unless running in interactive mode or using pyside.
 if __name__ == '__main__':
     import sys
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
