@@ -67,8 +67,6 @@ class GetDataThread(QtCore.QThread, StoppableThread):
                 if not self.eeg.get_data():
                     self.sig_get_data.emit(False)
                     self.stop()
-            else:
-                time.sleep(0.5)
 
 
 

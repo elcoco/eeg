@@ -864,6 +864,7 @@ class EEG(object):
                 skipped += 1
 
             if skipped >= 3:
+                log.error('lots of skipping frames... returning False')
                 return False
 
         if self.test(length):
@@ -874,10 +875,11 @@ class EEG(object):
                     return True
             else:
                 log.error('Error getting data, no data')
-                return False
+                return True
         else:
             log.error('Error getting data, length is corrupted: {0}'.format(length))
-            return
+            return True
+        return True
 
 
     def get_timestamp(self):
