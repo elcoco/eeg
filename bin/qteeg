@@ -32,6 +32,7 @@ path = os.path.dirname(os.path.abspath(__file__))
 uiFile = os.path.join(path, 'qteeg.ui')
 WindowTemplate, TemplateBaseClass = pg.Qt.loadUiType(uiFile)
 
+# TODO Don't forget to destroy widgets after "stop" 
 
 class StoppableThread(object):
     def __init__(self):
@@ -257,7 +258,6 @@ class PlotThread(QtCore.QThread, StoppableThread):
         while not self.stopped:
             if not self.paused:
                 self.update()
-                #time.sleep(0.1)
                 time.sleep(float(config.get('general', 'refresh')))
             else:
                 time.sleep(0.5)
